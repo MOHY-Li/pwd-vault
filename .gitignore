@@ -1,0 +1,42 @@
+# Rust
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Node / Frontend
+node_modules/
+dist/
+.solid/
+.vinxi/
+
+# Tauri
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+
+# Build output
+*.dmg
+*.app
+*.exe
+*.msi
+*.deb
+*.rpm
+*.apk
+*.ipa
+
+# Test / Coverage
+coverage/
