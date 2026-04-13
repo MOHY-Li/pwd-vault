@@ -1,5 +1,5 @@
 import { Show, createSignal } from "solid-js";
-import { entries, selectedEntryId, setEditingEntry, deleteEntry, saveVault } from "../../stores/vault";
+import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, saveVault } from "../../stores/vault";
 import EntryEditor from "../vault/EntryEditor";
 import PasswordGen from "../generator/PasswordGen";
 
@@ -48,7 +48,7 @@ export default function MainContent() {
               </div>
               <div class="flex gap-2">
                 <button
-                  onClick={() => setEditingEntry(entry())}
+                  onClick={() => { setEditingIsNew(false); setEditingEntry(entry()); }}
                   class="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-700"
                 >
                   ✏️ 编辑

@@ -78,4 +78,5 @@ export const [selectedEntryId, setSelectedEntryId] = createSignal<string | null>
 export const [searchQuery, setSearchQuery] = createSignal("");
 export const [sidebarFilter, setSidebarFilter] = createSignal<"all" | "favorites" | "login" | "note" | "card" | "identity" | "trash">("all");
 export const [editingEntry, setEditingEntry] = createSignal<Entry | null>(null);
+export const [editingIsNew, setEditingIsNew] = createSignal(false);
 export const [showGenerator, setShowGenerator] = createSignal(false);

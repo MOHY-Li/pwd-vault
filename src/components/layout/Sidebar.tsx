@@ -8,6 +8,7 @@ import {
   sidebarFilter,
   setSidebarFilter,
   setEditingEntry,
+  setEditingIsNew,
   setShowGenerator,
   lockVault,
   deleteEntry,
@@ -73,6 +74,7 @@ export default function Sidebar() {
       modified: new Date().toISOString(),
       password_history: [],
     };
+    setEditingIsNew(true);
     setEditingEntry(empty);
   }
 

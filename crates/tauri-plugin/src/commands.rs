@@ -74,15 +74,18 @@ pub fn vault_save(
     vault_state: State<'_, VaultState>,
     vault_path: State<'_, VaultPath>,
 ) -> Result<(), String> {
-    let path_guard = get_path(&vault_path)?;
-    let file_path = path_guard
-        .clone()
-        .ok_or_else(|| "no vault path stored; open or create a vault first".to_string())?;
-
+    // Acquire VaultState lock BEFORE VaultPath lock (consistent ordering).
     let mut vault_guard = get_vault(&vault_state)?;
     let vault = vault_guard
         .as_mut()
         .ok_or_else(|| "no vault is open".to_string())?;
+
+    let file_path = {
+        let path_guard = get_path(&vault_path)?;
+        path_guard
+            .clone()
+            .ok_or_else(|| "no vault path stored; open or create a vault first".to_string())?
+    };
 
     vault.save(&master_password, &file_path).map_err(|e| e.to_string())
 }
@@ -106,8 +109,11 @@ pub fn vault_is_open(vault_state: State<'_, VaultState>) -> Result<bool, String>
 
 #[tauri::command]
 pub fn entry_add(entry_json: String, vault_state: State<'_, VaultState>) -> Result<(), String> {
-    let entry: Entry =
+    let mut entry: Entry =
         serde_json::from_str(&entry_json).map_err(|e| format!("invalid entry JSON: {e}"))?;
+
+    // Override the id with a server-generated UUID to prevent frontend injection.
+    entry.id = uuid::Uuid::new_v4().to_string();
 
     let mut guard = get_vault(&vault_state)?;
     let vault = guard

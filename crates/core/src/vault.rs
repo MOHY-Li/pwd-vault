@@ -124,15 +124,7 @@ impl VaultFile {
 
         let master_key = derive_master_key(master_password, &salt)?;
         let vault_key = derive_vault_key(&master_key);
-        let entry_key_seed = {
-            use hkdf::Hkdf;
-            use sha2::Sha256;
-            let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
-            let mut seed = [0u8; 32];
-            hkdf.expand(b"pwd-vault-entry-key-seed", &mut seed)
-                .expect("32 bytes is valid");
-            seed
-        };
+        let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
 
         // --- decrypt index ---
         let mut index_nonce = [0u8; 24];
@@ -244,16 +236,44 @@ impl VaultFile {
     pub fn save(&mut self, master_password: &str, path: &std::path::Path) -> Result<()> {
         let master_key = derive_master_key(master_password, &self.salt)?;
         let vault_key = derive_vault_key(&master_key);
-        let entry_key_seed = {
-            use hkdf::Hkdf;
-            use sha2::Sha256;
-            let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
-            let mut seed = [0u8; 32];
-            hkdf.expand(b"pwd-vault-entry-key-seed", &mut seed)
-                .expect("32 bytes is valid");
-            seed
-        };
+        let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
 
+        // === Phase 1: encrypt all entries and compute offsets ===
+        let mut entry_blobs: Vec<Vec<u8>> = Vec::new();
+        let mut offset_accumulator: u64 = 0;
+
+        for idx_entry in &mut self.index.entries {
+            let entry = self
+                .entries
+                .iter()
+                .find(|e| e.id == idx_entry.id)
+                .ok_or_else(|| VaultError::EntryNotFound(idx_entry.id.clone()))?;
+
+            let entry_json = serde_json::to_vec(entry)
+                .map_err(|e| VaultError::Serialization(e.to_string()))?;
+            let entry_key = derive_entry_key(&entry_key_seed, entry.id.as_bytes());
+            let encrypted_entry = encrypt(&entry_json, &entry_key)?;
+
+            let blob_len = 24 + encrypted_entry.ciphertext.len();
+            // Build the raw blob: [4-byte blob_len] [nonce] [ciphertext]
+            let mut blob = Vec::with_capacity(4 + blob_len);
+            blob.extend_from_slice(&(blob_len as u32).to_le_bytes());
+            blob.extend_from_slice(&encrypted_entry.nonce);
+            blob.extend_from_slice(&encrypted_entry.ciphertext);
+
+            // Record offset (relative to data section start, will be finalized below)
+            idx_entry.offset = offset_accumulator;
+            idx_entry.length = blob_len as u32;
+            offset_accumulator += blob.len() as u64;
+
+            entry_blobs.push(blob);
+        }
+
+        // === Phase 2: serialize index (now with correct offsets) ===
+        let index_bytes = self.index.to_json_bytes()?;
+        let encrypted_index = encrypt(&index_bytes, &vault_key)?;
+
+        // === Phase 3: assemble final buffer ===
         let mut buf = Vec::new();
 
         // --- header ---
@@ -269,48 +289,25 @@ impl VaultFile {
         buf.extend_from_slice(&auth_hash);
 
         // --- encrypted index ---
-        let index_bytes = self.index.to_json_bytes()?;
-        let encrypted_index = encrypt(&index_bytes, &vault_key)?;
         buf.extend_from_slice(&encrypted_index.nonce);
         let idx_ct_len = encrypted_index.ciphertext.len() as u32;
         buf.extend_from_slice(&idx_ct_len.to_le_bytes());
         buf.extend_from_slice(&encrypted_index.ciphertext);
 
-        // Update index offsets as we write entries
-        let data_section_start = buf.len();
-        let mut offset_accumulator: u64 = 0;
-
-        // --- encrypted entries ---
+        // Fix up offsets: they were relative to data section start,
+        // now make them absolute file offsets.
+        let data_section_start = buf.len() as u64;
         for idx_entry in &mut self.index.entries {
-            // Find matching entry
-            let entry = self
-                .entries
-                .iter()
-                .find(|e| e.id == idx_entry.id)
-                .ok_or_else(|| VaultError::EntryNotFound(idx_entry.id.clone()))?;
-
-            let entry_json = serde_json::to_vec(entry)
-                .map_err(|e| VaultError::Serialization(e.to_string()))?;
-            let entry_key = derive_entry_key(&entry_key_seed, entry.id.as_bytes());
-            let encrypted_entry = encrypt(&entry_json, &entry_key)?;
-
-            // Record offset and length in index
-            idx_entry.offset = (data_section_start as u64) + offset_accumulator;
-            // blob = 4(len) + 24(nonce) + ciphertext.len() + 16(tag)
-            // But encrypted_entry.ciphertext already includes the 16-byte tag
-            let blob_len = 24 + encrypted_entry.ciphertext.len();
-            idx_entry.length = blob_len as u32;
-            offset_accumulator += 4 + blob_len as u64;
-
-            // Write: [4-byte blob_len] [24-byte nonce] [ciphertext (includes tag)]
-            buf.extend_from_slice(&(blob_len as u32).to_le_bytes());
-            buf.extend_from_slice(&encrypted_entry.nonce);
-            buf.extend_from_slice(&encrypted_entry.ciphertext);
+            idx_entry.offset += data_section_start;
         }
 
-        let mac_key = derive_mac_key(&master_key);
+        // --- entry data section ---
+        for blob in &entry_blobs {
+            buf.extend_from_slice(blob);
+        }
 
         // --- file MAC ---
+        let mac_key = derive_mac_key(&master_key);
         let mac = compute_mac(&buf, &mac_key);
         buf.extend_from_slice(&mac);
 
@@ -443,6 +440,20 @@ impl VaultFile {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — key derivation (shared between open & save)
+// ---------------------------------------------------------------------------
+
+fn derive_entry_key_seed(master_key: &[u8; 32]) -> [u8; 32] {
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+    let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key);
+    let mut seed = [0u8; 32];
+    hkdf.expand(b"pwd-vault-entry-key-seed", &mut seed)
+        .expect("32 bytes is valid");
+    seed
 }
 
 // ---------------------------------------------------------------------------

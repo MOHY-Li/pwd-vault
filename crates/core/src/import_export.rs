@@ -262,7 +262,9 @@ fn import_onepassword_csv(data: &str) -> Result<Vec<Entry>> {
 
 fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
     // Minimal hand-rolled parsing — avoids adding an XML parser dependency.
-    // We look for <Entry> blocks and extract known String elements.
+    // We look for <Entry> blocks and use stateful parsing: track the last
+    // <Key> value seen, and when <Value> is encountered, assign it to the
+    // corresponding field.
     let mut entries = Vec::new();
     let mut title = String::new();
     let mut username = String::new();
@@ -270,6 +272,7 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
     let mut url = String::new();
     let mut notes = String::new();
     let mut in_entry = false;
+    let mut current_key: Option<String> = None;
 
     for line in data.lines() {
         let trimmed = line.trim();
@@ -281,11 +284,13 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
             password.clear();
             url.clear();
             notes.clear();
+            current_key = None;
             continue;
         }
 
         if in_entry && (trimmed.starts_with("</Entry>") || trimmed == "</Entry>") {
             in_entry = false;
+            current_key = None;
             let mut e = Entry::new(title.clone(), EntryType::Login);
             e.username.clone_from(&username);
             e.password.clone_from(&password);
@@ -296,16 +301,25 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
         }
 
         if in_entry {
-            if let Some(val) = extract_keepass_field(trimmed, "UserName") {
-                username = val;
-            } else if let Some(val) = extract_keepass_field(trimmed, "Password") {
-                password = val;
-            } else if let Some(val) = extract_keepass_field(trimmed, "Title") {
-                title = val;
-            } else if let Some(val) = extract_keepass_field(trimmed, "URL") {
-                url = val;
-            } else if let Some(val) = extract_keepass_field(trimmed, "Notes") {
-                notes = val;
+            // Track the last <Key>...</Key> value seen
+            if let Some(key) = extract_xml_text(trimmed, "Key") {
+                current_key = Some(key);
+                continue;
+            }
+
+            // When we see <Value>...</Value>, assign based on current_key
+            if let Some(val) = extract_xml_text(trimmed, "Value") {
+                if let Some(ref key) = current_key {
+                    match key.as_str() {
+                        "UserName" => username = val,
+                        "Password" => password = val,
+                        "Title" => title = val,
+                        "URL" => url = val,
+                        "Notes" => notes = val,
+                        _ => {} // ignore unknown keys
+                    }
+                }
+                current_key = None;
             }
         }
     }
@@ -319,19 +333,16 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
-/// Extract a `KeePass` XML value tag like `<Value>foo</Value>` that appears
-/// after a `<Key>FieldName</Key>` in the preceding lines.  Because we process
-/// line-by-line we rely on the common layout where Key and Value are adjacent.
-/// Here we simply look for `<Value>...</Value>` on the given line.
-fn extract_keepass_field(line: &str, _field: &str) -> Option<String> {
-    // Look for <Value>content</Value>
-    if let Some(start) = line.find("<Value>") {
-        let content_start = start + "<Value>".len();
-        if let Some(end) = line[content_start..].find("</Value>") {
+/// Extract the text content from an XML tag like `<Tag>content</Tag>`.
+fn extract_xml_text(line: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    if let Some(start) = line.find(&open) {
+        let content_start = start + open.len();
+        if let Some(end) = line[content_start..].find(&close) {
             return Some(line[content_start..content_start + end].to_string());
         }
     }
-    // Also handle self-closing or attribute form <Value Val="content"/>
     None
 }
 

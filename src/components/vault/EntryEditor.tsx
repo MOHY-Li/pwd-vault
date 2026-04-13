@@ -1,5 +1,5 @@
 import { Show, createSignal } from "solid-js";
-import { editingEntry, setEditingEntry, addEntry, updateEntry } from "../../stores/vault";
+import { editingEntry, setEditingEntry, editingIsNew, addEntry, updateEntry } from "../../stores/vault";
 import { generatePassword, evaluateStrength } from "../../api";
 import type { Entry, StrengthReport } from "../../api";
 
@@ -32,8 +32,7 @@ export default function EntryEditor() {
     setSaving(true);
     try {
       e.modified = new Date().toISOString();
-      const isNew = !editingEntry()?.title; // rough heuristic — new entries have empty title
-      if (isNew) {
+      if (editingIsNew()) {
         await addEntry(e);
       } else {
         await updateEntry(e);
