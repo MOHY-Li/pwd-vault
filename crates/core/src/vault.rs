@@ -286,13 +286,13 @@ impl VaultFile {
             .map_err(|e| VaultError::Serialization(e.to_string()))?;
 
         // Compute absolute offsets BEFORE serializing the index.
-        // Header: 4(magic) + 1(ver) + 1(flags) + 4(mem) + 4(iter) + 1(par) + 32(salt) + 32(auth_hash) = 79 bytes
+        // Header: 4(magic) + 1(ver) + 1(flags) + 4(mem) + 2(iter) + 1(par) + 32(salt) + 32(auth_hash) = 77 bytes
         // Index section: 24(nonce) + 4(ct_len) + encrypted_index.ciphertext.len()
         // We need to encrypt first to know ciphertext size.
         let index_bytes = self.index.to_json_bytes()?;
         let encrypted_index = encrypt(&index_bytes, &vault_key)?;
 
-        let data_section_start: u64 = 79 + 24 + 4 + encrypted_index.ciphertext.len() as u64;
+        let data_section_start: u64 = 77 + 24 + 4 + encrypted_index.ciphertext.len() as u64;
         for idx_entry in &mut self.index.entries {
             idx_entry.offset += data_section_start;
         }

@@ -18,6 +18,7 @@ export default function AuditLog() {
     if ("VaultCreated" in e) return "🔐 创建密码库";
     if ("VaultOpened" in e) return "🔓 打开密码库";
     if ("VaultLocked" in e) return "🔒 锁定密码库";
+    if ("EntryViewed" in e) return `👁️ 查看条目 ${e.EntryViewed.entry_id.slice(0, 8)}...`;
     if ("EntryCreated" in e) return `➕ 创建条目 ${e.EntryCreated.entry_id.slice(0, 8)}...`;
     if ("EntryUpdated" in e) return `✏️ 更新条目 ${e.EntryUpdated.entry_id.slice(0, 8)}...`;
     if ("EntryDeleted" in e) return `🗑️ 删除条目 ${e.EntryDeleted.entry_id.slice(0, 8)}...`;

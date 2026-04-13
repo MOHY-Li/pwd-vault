@@ -35,6 +35,16 @@ export async function lockVault() {
   setIsUnlocked(false);
   setEntries([]);
   setTrash([]);
+  // Clear all UI state to prevent stale modals/signals on re-unlock
+  setSelectedEntryId(null);
+  setEditingEntry(null);
+  setEditingIsNew(false);
+  setShowGenerator(false);
+  setShowTrash(false);
+  setShowAuditLog(false);
+  setShowImportExport(false);
+  setSearchQuery("");
+  setSidebarFilter("all");
 }
 
 export async function saveVault() {
