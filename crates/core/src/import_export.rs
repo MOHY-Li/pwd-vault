@@ -334,11 +334,14 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
 }
 
 /// Extract the text content from an XML tag like `<Tag>content</Tag>`.
+/// Handles opening tags with attributes, e.g. `<Value ProtectInMemory="True">secret</Value>`.
 fn extract_xml_text(line: &str, tag: &str) -> Option<String> {
-    let open = format!("<{tag}>");
+    let open_start = format!("<{tag}");
     let close = format!("</{tag}>");
-    if let Some(start) = line.find(&open) {
-        let content_start = start + open.len();
+    if let Some(start) = line.find(&open_start) {
+        // Find the closing '>' of the opening tag (may have attributes)
+        let tag_end = line[start..].find('>')?;
+        let content_start = start + tag_end + 1;
         if let Some(end) = line[content_start..].find(&close) {
             return Some(line[content_start..content_start + end].to_string());
         }

@@ -67,10 +67,15 @@ fn generate_nonce() -> [u8; 24] {
 
 /// Derive the master key from a password and salt using Argon2id.
 ///
-/// Parameters: 256 MiB memory, 4 iterations, parallelism 4.
 /// The password bytes are zeroised after use.
-pub fn derive_master_key(password: &str, salt: &[u8; 32]) -> Result<MasterKey> {
-    let params = Params::new(256 * 1024, 4, 4, Some(32))
+pub fn derive_master_key(
+    password: &str,
+    salt: &[u8; 32],
+    memory_mib: u32,
+    iterations: u16,
+    parallelism: u32,
+) -> Result<MasterKey> {
+    let params = Params::new(memory_mib * 1024, iterations as u32, parallelism, Some(32))
         .map_err(|e| VaultError::Crypto(format!("invalid Argon2 params: {e}")))?;
 
     let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
@@ -155,17 +160,27 @@ pub fn decrypt(encrypted: &EncryptedData, key: &[u8; 32]) -> Result<Vec<u8>> {
 // Password verification
 // ---------------------------------------------------------------------------
 
-/// Verify a password against a stored salt and authentication hash.
+/// Verify a password against a stored salt and authentication hash,
+/// returning the derived MasterKey on success.
 ///
 /// Uses constant-time comparison to prevent timing attacks.
-pub fn verify_password(
+/// Performs Argon2id KDF exactly once — call sites do NOT need to call
+/// `derive_master_key` separately.
+pub fn verify_and_derive_key(
     password: &str,
     salt: &[u8; 32],
     stored_auth_hash: &[u8; 32],
-) -> Result<bool> {
-    let master_key = derive_master_key(password, salt)?;
+    memory_mib: u32,
+    iterations: u16,
+    parallelism: u32,
+) -> Result<MasterKey> {
+    let master_key = derive_master_key(password, salt, memory_mib, iterations, parallelism)?;
     let computed = derive_auth_hash(&master_key);
-    Ok(computed.ct_eq(stored_auth_hash).into())
+    if computed.ct_eq(stored_auth_hash).into() {
+        Ok(master_key)
+    } else {
+        Err(VaultError::InvalidPassword)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +221,11 @@ mod tests {
     use super::*;
 
     const TEST_PASSWORD: &str = "correct-horse-battery-staple";
+
+    /// Test helper — calls derive_master_key with default Argon2 params (low for speed).
+    fn test_derive_master_key(password: &str, salt: &[u8; 32]) -> Result<MasterKey> {
+        derive_master_key(password, salt, 256, 4, 4)
+    }
     const TEST_SALT: [u8; 32] = [0xAB; 32];
     const TEST_KEY: [u8; 32] = [0x42; 32];
 
@@ -257,8 +277,8 @@ mod tests {
 
     #[test]
     fn key_derivation_deterministic() {
-        let key1 = derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
-        let key2 = derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
+        let key1 = test_derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
+        let key2 = test_derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
         assert_eq!(key1.as_bytes(), key2.as_bytes());
     }
 
@@ -267,15 +287,15 @@ mod tests {
         let salt_a = [0x01; 32];
         let salt_b = [0x02; 32];
 
-        let key_a = derive_master_key(TEST_PASSWORD, &salt_a).unwrap();
-        let key_b = derive_master_key(TEST_PASSWORD, &salt_b).unwrap();
+        let key_a = test_derive_master_key(TEST_PASSWORD, &salt_a).unwrap();
+        let key_b = test_derive_master_key(TEST_PASSWORD, &salt_b).unwrap();
         assert_ne!(key_a.as_bytes(), key_b.as_bytes());
     }
 
     #[test]
     fn different_passwords_produce_different_keys() {
-        let key_a = derive_master_key("password-one", &TEST_SALT).unwrap();
-        let key_b = derive_master_key("password-two", &TEST_SALT).unwrap();
+        let key_a = test_derive_master_key("password-one", &TEST_SALT).unwrap();
+        let key_b = test_derive_master_key("password-two", &TEST_SALT).unwrap();
         assert_ne!(key_a.as_bytes(), key_b.as_bytes());
     }
 
@@ -283,7 +303,7 @@ mod tests {
 
     #[test]
     fn derive_auth_hash_deterministic() {
-        let mk = derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
+        let mk = test_derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
         let h1 = derive_auth_hash(&mk);
         let h2 = derive_auth_hash(&mk);
         assert_eq!(h1, h2);
@@ -291,7 +311,7 @@ mod tests {
 
     #[test]
     fn derive_vault_key_deterministic() {
-        let mk = derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
+        let mk = test_derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
         let k1 = derive_vault_key(&mk);
         let k2 = derive_vault_key(&mk);
         assert_eq!(k1, k2);
@@ -299,7 +319,7 @@ mod tests {
 
     #[test]
     fn auth_hash_differs_from_vault_key() {
-        let mk = derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
+        let mk = test_derive_master_key(TEST_PASSWORD, &TEST_SALT).unwrap();
         let auth = derive_auth_hash(&mk);
         let vault = derive_vault_key(&mk);
         assert_ne!(auth, vault);
@@ -328,19 +348,21 @@ mod tests {
     #[test]
     fn verify_password_correct() {
         let salt = generate_salt();
-        let mk = derive_master_key(TEST_PASSWORD, &salt).unwrap();
+        let mk = test_derive_master_key(TEST_PASSWORD, &salt).unwrap();
         let auth_hash = derive_auth_hash(&mk);
 
-        assert!(verify_password(TEST_PASSWORD, &salt, &auth_hash).unwrap());
+        let result = verify_and_derive_key(TEST_PASSWORD, &salt, &auth_hash, 256, 4, 4);
+        assert!(result.is_ok());
     }
 
     #[test]
     fn verify_password_wrong() {
         let salt = generate_salt();
-        let mk = derive_master_key(TEST_PASSWORD, &salt).unwrap();
+        let mk = test_derive_master_key(TEST_PASSWORD, &salt).unwrap();
         let auth_hash = derive_auth_hash(&mk);
 
-        assert!(!verify_password("wrong-password", &salt, &auth_hash).unwrap());
+        let result = verify_and_derive_key("wrong-password", &salt, &auth_hash, 256, 4, 4);
+        assert!(result.is_err());
     }
 
     // ---- MAC ----

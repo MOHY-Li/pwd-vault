@@ -1,5 +1,5 @@
 import { Show, createSignal, createEffect, onCleanup } from "solid-js";
-import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, totpCodes, refreshTotp } from "../../stores/vault";
+import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, totpCodes, refreshTotp, copyToClipboard } from "../../stores/vault";
 
 export default function MainContent() {
   const [showPassword, setShowPassword] = createSignal(false);
@@ -7,8 +7,8 @@ export default function MainContent() {
 
   const selectedEntry = () => entries.find((e) => e.id === selectedEntryId());
 
-  function copyToClipboard(text: string, field: string) {
-    navigator.clipboard.writeText(text);
+  function handleCopy(text: string, field: string) {
+    copyToClipboard(text);
     setCopied(field);
     setTimeout(() => setCopied(""), 2000);
   }
@@ -67,21 +67,21 @@ export default function MainContent() {
             {/* Fields */}
             <div class="space-y-4">
               <Show when={entry().username}>
-                <FieldRow label="用户名" value={entry().username} onCopy={() => copyToClipboard(entry().username, "username")} copied={copied() === "username"} />
+                <FieldRow label="用户名" value={entry().username} onCopy={() => handleCopy(entry().username, "username")} copied={copied() === "username"} />
               </Show>
 
               <Show when={entry().password}>
                 <FieldRow
                   label="密码"
                   value={showPassword() ? entry().password : "••••••••••"}
-                  onCopy={() => copyToClipboard(entry().password, "password")}
+                  onCopy={() => handleCopy(entry().password, "password")}
                   copied={copied() === "password"}
                   onToggleVisibility={() => setShowPassword(!showPassword())}
                 />
               </Show>
 
               <Show when={entry().url}>
-                <FieldRow label="网址" value={entry().url} onCopy={() => copyToClipboard(entry().url, "url")} copied={copied() === "url"} />
+                <FieldRow label="网址" value={entry().url} onCopy={() => handleCopy(entry().url, "url")} copied={copied() === "url"} />
               </Show>
 
               <Show when={entry().notes}>
@@ -173,7 +173,7 @@ function TotpDisplay(props: { entryId: string }) {
 
   function handleCopy() {
     if (code()) {
-      navigator.clipboard.writeText(code());
+      copyToClipboard(code());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }

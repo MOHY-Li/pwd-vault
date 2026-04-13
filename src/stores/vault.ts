@@ -35,6 +35,8 @@ export async function lockVault() {
   setIsUnlocked(false);
   setEntries([]);
   setTrash([]);
+  setTotpCodes({});
+  setVaultPath("");
   // Clear all UI state to prevent stale modals/signals on re-unlock
   setSelectedEntryId(null);
   setEditingEntry(null);
@@ -45,6 +47,21 @@ export async function lockVault() {
   setShowImportExport(false);
   setSearchQuery("");
   setSidebarFilter("all");
+}
+
+// ---------------------------------------------------------------------------
+// Secure clipboard — auto-clear after 30 seconds
+// ---------------------------------------------------------------------------
+
+let clipboardTimer: ReturnType<typeof setTimeout> | null = null;
+
+export async function copyToClipboard(text: string) {
+  await navigator.clipboard.writeText(text);
+  if (clipboardTimer) clearTimeout(clipboardTimer);
+  clipboardTimer = setTimeout(() => {
+    navigator.clipboard.writeText("").catch(() => {});
+    clipboardTimer = null;
+  }, 30_000);
 }
 
 export async function saveVault() {

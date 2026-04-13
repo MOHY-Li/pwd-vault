@@ -14,9 +14,8 @@ use std::io::{Cursor, Read, Write};
 
 use base64::Engine;
 use crate::crypto::{
-    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key,
-    derive_master_key, derive_vault_key, encrypt, generate_salt, verify_mac,
-    verify_password, EncryptedData,
+    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key, derive_master_key,
+    derive_vault_key, encrypt, generate_salt, verify_and_derive_key, verify_mac, EncryptedData,
 };
 use crate::entry::Entry;
 use crate::error::{Result, VaultError};
@@ -76,7 +75,13 @@ impl VaultFile {
     /// Returns a `VaultFile` with an empty index and no entries.
     pub fn create(master_password: &str) -> Result<Self> {
         let salt = generate_salt();
-        let master_key = derive_master_key(master_password, &salt)?;
+        let master_key = derive_master_key(
+            master_password,
+            &salt,
+            DEFAULT_ARGON2_MEMORY_MIB,
+            DEFAULT_ARGON2_ITERATIONS,
+            u32::from(DEFAULT_ARGON2_PARALLELISM),
+        )?;
         let _auth_hash = derive_auth_hash(&master_key);
         let _vault_key = derive_vault_key(&master_key);
 
@@ -121,12 +126,15 @@ impl VaultFile {
         let mut stored_auth_hash = [0u8; 32];
         cursor.read_exact(&mut stored_auth_hash)?;
 
-        // --- verify password ---
-        if !verify_password(master_password, &salt, &stored_auth_hash)? {
-            return Err(VaultError::InvalidPassword);
-        }
-
-        let master_key = derive_master_key(master_password, &salt)?;
+        // --- verify password & derive master key in ONE Argon2 pass ---
+        let master_key = verify_and_derive_key(
+            master_password,
+            &salt,
+            &stored_auth_hash,
+            argon2_memory_mib,
+            argon2_iterations,
+            u32::from(argon2_parallelism),
+        )?;
         let vault_key = derive_vault_key(&master_key);
         let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
 
@@ -246,7 +254,13 @@ impl VaultFile {
 
     /// Save the vault to disk, re-encrypting everything.
     pub fn save(&mut self, master_password: &str, path: &std::path::Path) -> Result<()> {
-        let master_key = derive_master_key(master_password, &self.salt)?;
+        let master_key = derive_master_key(
+            master_password,
+            &self.salt,
+            self.argon2_memory_mib,
+            self.argon2_iterations,
+            u32::from(self.argon2_parallelism),
+        )?;
         let vault_key = derive_vault_key(&master_key);
         let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
 
@@ -379,7 +393,13 @@ impl VaultFile {
         };
 
         self.index.upsert_entry(idx_entry);
-        self.entries.push(entry);
+
+        // Prevent duplicate entries — replace if ID already exists
+        if let Some(pos) = self.entries.iter().position(|e| e.id == id) {
+            self.entries[pos] = entry;
+        } else {
+            self.entries.push(entry);
+        }
     }
 
     /// Update an existing entry by id.

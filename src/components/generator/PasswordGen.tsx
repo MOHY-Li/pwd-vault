@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { generatePassword, evaluateStrength } from "../../api";
 import type { StrengthReport } from "../../api";
-import { showGenerator, setShowGenerator } from "../../stores/vault";
+import { showGenerator, setShowGenerator, copyToClipboard } from "../../stores/vault";
 
 export default function PasswordGen() {
   const [style, setStyle] = createSignal<"random" | "diceware">("random");
@@ -35,7 +35,7 @@ export default function PasswordGen() {
   }
 
   function handleCopy() {
-    navigator.clipboard.writeText(result());
+    copyToClipboard(result());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }

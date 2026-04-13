@@ -1,6 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import { vaultImport, vaultExport, detectImportFormat } from "../../api";
-import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport } from "../../stores/vault";
+import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport, copyToClipboard } from "../../stores/vault";
 
 const IMPORT_FORMATS = [
   { key: "json", label: "JSON", desc: "通用 JSON 格式" },
@@ -52,7 +52,7 @@ export default function ImportExport() {
     try {
       const result = await vaultExport(exportFormat());
       // Copy to clipboard
-      await navigator.clipboard.writeText(result);
+      await copyToClipboard(result);
       setStatus(`✅ 已导出到剪贴板（${exportFormat().toUpperCase()} 格式）`);
     } catch (err) {
       setStatus(`❌ 导出失败: ${err}`);
