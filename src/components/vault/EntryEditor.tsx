@@ -128,7 +128,15 @@ export default function EntryEditor() {
                   <input
                     type="text"
                     value={entry()?.password ?? ""}
-                    onInput={(e) => updateField("password", e.currentTarget.value)}
+                    onInput={async (e) => {
+                      const val = e.currentTarget.value;
+                      updateField("password", val);
+                      if (val) {
+                        try { setStrength(await evaluateStrength(val)); } catch {}
+                      } else {
+                        setStrength(null);
+                      }
+                    }}
                     class="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-sm text-zinc-100 focus:border-emerald-500 focus:outline-none"
                     placeholder="点击生成或手动输入"
                   />
@@ -146,7 +154,7 @@ export default function EntryEditor() {
                         <div
                           class="h-full rounded-full transition-all"
                           style={{
-                            width: `${s().score * 10}%`,
+                            width: `${s().score}%`,
                             "background-color":
                               s().score >= 80
                                 ? "#10b981"
@@ -156,7 +164,7 @@ export default function EntryEditor() {
                           }}
                         />
                       </div>
-                      <span class="text-zinc-500">{s().label}</span>
+                      <span class="text-zinc-500">{s().level}</span>
                     </div>
                   )}
                 </Show>

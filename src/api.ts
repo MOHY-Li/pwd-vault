@@ -45,7 +45,7 @@ export interface StrengthReport {
   score: number;
   entropy: number;
   crack_time: string;
-  label: string;
+  level: string;
 }
 
 export interface AuditEntry {
@@ -54,15 +54,17 @@ export interface AuditEntry {
 }
 
 export type AuditEvent =
-  | { VaultCreated: void }
-  | { VaultOpened: void }
-  | { VaultLocked: void }
+  | "VaultCreated"
+  | "VaultOpened"
+  | "VaultLocked"
+  | "VaultUnlocked"
+  | "MasterPasswordChanged"
+  | "DataExported"
   | { EntryViewed: { entry_id: string } }
   | { EntryCreated: { entry_id: string } }
   | { EntryUpdated: { entry_id: string } }
   | { EntryDeleted: { entry_id: string } }
   | { PasswordCopied: { entry_id: string } }
-  | { DataExported: void }
   | { DataImported: { count: number } };
 
 // ---------------------------------------------------------------------------

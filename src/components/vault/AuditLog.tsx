@@ -15,16 +15,20 @@ export default function AuditLog() {
 
   function formatEvent(entry: AuditEntry): string {
     const e = entry.event_type;
-    if ("VaultCreated" in e) return "🔐 创建密码库";
-    if ("VaultOpened" in e) return "🔓 打开密码库";
-    if ("VaultLocked" in e) return "🔒 锁定密码库";
-    if ("EntryViewed" in e) return `👁️ 查看条目 ${e.EntryViewed.entry_id.slice(0, 8)}...`;
-    if ("EntryCreated" in e) return `➕ 创建条目 ${e.EntryCreated.entry_id.slice(0, 8)}...`;
-    if ("EntryUpdated" in e) return `✏️ 更新条目 ${e.EntryUpdated.entry_id.slice(0, 8)}...`;
-    if ("EntryDeleted" in e) return `🗑️ 删除条目 ${e.EntryDeleted.entry_id.slice(0, 8)}...`;
-    if ("PasswordCopied" in e) return `📋 复制密码 ${e.PasswordCopied.entry_id.slice(0, 8)}...`;
-    if ("DataExported" in e) return "📤 导出数据";
-    if ("DataImported" in e) return `📥 导入数据 (${e.DataImported.count} 条)`;
+    if (e === "VaultCreated") return "🔐 创建密码库";
+    if (e === "VaultOpened") return "🔓 打开密码库";
+    if (e === "VaultLocked") return "🔒 锁定密码库";
+    if (e === "VaultUnlocked") return "🔓 解锁密码库";
+    if (e === "MasterPasswordChanged") return "🔑 修改主密码";
+    if (e === "DataExported") return "📤 导出数据";
+    if (typeof e === "object") {
+      if ("EntryViewed" in e) return `👁️ 查看条目 ${e.EntryViewed.entry_id.slice(0, 8)}...`;
+      if ("EntryCreated" in e) return `➕ 创建条目 ${e.EntryCreated.entry_id.slice(0, 8)}...`;
+      if ("EntryUpdated" in e) return `✏️ 更新条目 ${e.EntryUpdated.entry_id.slice(0, 8)}...`;
+      if ("EntryDeleted" in e) return `🗑️ 删除条目 ${e.EntryDeleted.entry_id.slice(0, 8)}...`;
+      if ("PasswordCopied" in e) return `📋 复制密码 ${e.PasswordCopied.entry_id.slice(0, 8)}...`;
+      if ("DataImported" in e) return `📥 导入数据 (${e.DataImported.count} 条)`;
+    }
     return "未知操作";
   }
 

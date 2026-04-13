@@ -265,18 +265,23 @@ impl VaultFile {
         let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
 
         // === Phase 1: encrypt all entries and compute offsets ===
+        // Work on a cloned index to avoid corrupting self.index on save failure.
+        let mut index_work = self.index.clone();
+        index_work.deleted_entries_json = serde_json::to_string(&self.deleted_entries)
+            .map_err(|e| VaultError::Serialization(e.to_string()))?;
+
         let mut entry_blobs: Vec<Vec<u8>> = Vec::new();
         let mut offset_accumulator: u64 = 0;
 
-        for idx_entry in &mut self.index.entries {
+        for idx_entry in &mut index_work.entries {
             let entry = self
                 .entries
                 .iter()
                 .find(|e| e.id == idx_entry.id)
                 .ok_or_else(|| VaultError::EntryNotFound(idx_entry.id.clone()))?;
 
-            let entry_json = serde_json::to_vec(entry)
-                .map_err(|e| VaultError::Serialization(e.to_string()))?;
+            let entry_json =
+                serde_json::to_vec(entry).map_err(|e| VaultError::Serialization(e.to_string()))?;
             let entry_key = derive_entry_key(&entry_key_seed, entry.id.as_bytes());
             let encrypted_entry = encrypt(&entry_json, &entry_key)?;
 
@@ -294,26 +299,39 @@ impl VaultFile {
 
             entry_blobs.push(blob);
         }
+        // Iterate until encrypted index size converges (offset fixup can grow the JSON).
+        let mut encrypted_index = encrypt(&[], &vault_key)?; // placeholder, overwritten in loop
+        let relative_offsets: Vec<u64> = index_work.entries.iter().map(|e| e.offset).collect();
+        let mut prev_ct_len = 0usize;
+        let mut max_iters = 20;
+        loop {
+            max_iters -= 1;
+            if max_iters == 0 {
+                break; // Accept last computed offsets even if not fully converged
+            }
+            // Restore relative offsets
+            for (i, idx_entry) in index_work.entries.iter_mut().enumerate() {
+                idx_entry.offset = relative_offsets[i];
+            }
+            let index_bytes = index_work.to_json_bytes()?;
+            encrypted_index = encrypt(&index_bytes, &vault_key)?;
+            let data_section_start: u64 = 77 + 24 + 4 + encrypted_index.ciphertext.len() as u64;
 
-        // === Phase 2: serialize deleted entries into index, then serialize index ===
-        self.index.deleted_entries_json = serde_json::to_string(&self.deleted_entries)
-            .map_err(|e| VaultError::Serialization(e.to_string()))?;
+            // Apply absolute offsets
+            for idx_entry in &mut index_work.entries {
+                idx_entry.offset += data_section_start;
+            }
+            // Serialize with absolute offsets
+            let index_bytes_abs = index_work.to_json_bytes()?;
+            encrypted_index = encrypt(&index_bytes_abs, &vault_key)?;
 
-        // Compute absolute offsets BEFORE serializing the index.
-        // Header: 4(magic) + 1(ver) + 1(flags) + 4(mem) + 2(iter) + 1(par) + 32(salt) + 32(auth_hash) = 77 bytes
-        // Index section: 24(nonce) + 4(ct_len) + encrypted_index.ciphertext.len()
-        // We need to encrypt first to know ciphertext size.
-        let index_bytes = self.index.to_json_bytes()?;
-        let encrypted_index = encrypt(&index_bytes, &vault_key)?;
-
-        let data_section_start: u64 = 77 + 24 + 4 + encrypted_index.ciphertext.len() as u64;
-        for idx_entry in &mut self.index.entries {
-            idx_entry.offset += data_section_start;
+            if encrypted_index.ciphertext.len() == prev_ct_len {
+                break;
+            }
+            prev_ct_len = encrypted_index.ciphertext.len();
+            // Loop again: prev_ct_len now reflects the absolute-offset index size,
+            // so the next iteration's data_section_start will be based on a matching size.
         }
-
-        // Re-serialize index with correct absolute offsets.
-        let index_bytes = self.index.to_json_bytes()?;
-        let encrypted_index = encrypt(&index_bytes, &vault_key)?;
 
         // === Phase 3: assemble final buffer ===
         let mut buf = Vec::new();
@@ -353,6 +371,10 @@ impl VaultFile {
             f.write_all(&buf)?;
             f.sync_all()?;
         }
+
+        // Commit index_work back to self.index only after file write succeeds
+        self.index = index_work;
+
         std::fs::rename(&tmp_path, path)?;
 
         Ok(())

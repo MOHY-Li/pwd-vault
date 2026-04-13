@@ -18,20 +18,25 @@ export default function PasswordGen() {
   const [copied, setCopied] = createSignal(false);
 
   async function handleGenerate() {
-    const pwd = await generatePassword({
-      style: style(),
-      length: length(),
-      uppercase: uppercase(),
-      lowercase: lowercase(),
-      digits: digits(),
-      special: special(),
-      excludeAmbiguous: excludeAmbiguous(),
-      wordCount: wordCount(),
-      separator: separator(),
-    });
-    setResult(pwd);
-    const report = await evaluateStrength(pwd);
-    setStrength(report);
+    try {
+      const pwd = await generatePassword({
+        style: style(),
+        length: length(),
+        uppercase: uppercase(),
+        lowercase: lowercase(),
+        digits: digits(),
+        special: special(),
+        excludeAmbiguous: excludeAmbiguous(),
+        wordCount: wordCount(),
+        separator: separator(),
+      });
+      setResult(pwd);
+      const report = await evaluateStrength(pwd);
+      setStrength(report);
+    } catch {
+      setResult("");
+      setStrength(null);
+    }
   }
 
   function handleCopy() {
@@ -147,12 +152,12 @@ export default function PasswordGen() {
                     <div
                       class="h-full rounded-full"
                       style={{
-                        width: `${s().score * 10}%`,
+                        width: `${s().score}%`,
                         "background-color": s().score >= 80 ? "#10b981" : s().score >= 50 ? "#f59e0b" : "#ef4444",
                       }}
                     />
                   </div>
-                  <span class="text-zinc-500">{s().label} · {s().crack_time}</span>
+                  <span class="text-zinc-500">{s().level} · {s().crack_time}</span>
                 </div>
               )}
             </Show>

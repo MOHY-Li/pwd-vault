@@ -1,6 +1,7 @@
 import { createSignal, Show, onMount } from "solid-js";
 import { createVault, unlockVault } from "../../stores/vault";
 import { appDataDir } from "@tauri-apps/api/path";
+import { exists } from "@tauri-apps/plugin-fs";
 
 export default function LockScreen() {
   const [password, setPassword] = createSignal("");
@@ -12,7 +13,10 @@ export default function LockScreen() {
 
   onMount(async () => {
     const dir = await appDataDir();
-    setDefaultPath(dir + "my.vault");
+    const vaultPath = dir + "my.vault";
+    setDefaultPath(vaultPath);
+    const fileExists = await exists(vaultPath);
+    setIsSetup(!fileExists);
   });
 
   async function handleSubmit(e: Event) {

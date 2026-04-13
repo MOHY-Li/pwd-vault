@@ -96,6 +96,9 @@ impl DedupEngine {
         // No URL match but check if same title + username (for entries without URLs).
         if entry_url.is_empty() {
             for (i, ex) in existing.iter().enumerate() {
+                if ex.entry_type != EntryType::Login {
+                    continue;
+                }
                 let ex_user = ex.username.trim().to_lowercase();
                 if ex.title.trim().to_lowercase() == entry.title.trim().to_lowercase()
                     && ex_user == entry_user
