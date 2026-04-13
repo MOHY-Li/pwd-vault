@@ -8,6 +8,7 @@ use crate::error::VaultError;
 
 /// Configuration describing which character categories to include in a password.
 #[derive(Clone, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CharSet {
     pub uppercase: bool,
     pub lowercase: bool,
@@ -33,7 +34,9 @@ impl Default for CharSet {
 impl CharSet {
     /// Build the concrete list of characters from the configuration flags.
     ///
-    /// Ambiguous characters: `0 O 1 l I | \`` `'`
+    /// Ambiguous characters: `0 O 1 l I | \` '`
+    #[allow(clippy::doc_markdown)]
+    #[must_use] 
     pub fn build_charset(&self) -> Vec<char> {
         const AMBIGUOUS: &[char] = &['0', 'O', '1', 'l', 'I', '|', '`', '\''];
 
@@ -78,6 +81,7 @@ impl CharSet {
     }
 
     /// Shannon entropy per character given the current charset size.
+    #[must_use] 
     pub fn entropy_per_char(&self) -> f64 {
         let charset = self.build_charset();
         let n = charset.len() as f64;

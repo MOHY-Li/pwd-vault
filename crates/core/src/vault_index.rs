@@ -80,6 +80,7 @@ pub struct Folder {
 
 impl VaultIndex {
     /// Create a fresh, empty index.
+    #[must_use] 
     pub fn new() -> Self {
         let now = Utc::now();
         Self {
@@ -125,7 +126,7 @@ impl VaultIndex {
         }
     }
 
-    /// Permanently purge a soft-deleted entry ID (no-op if not in deleted_ids).
+    /// Permanently purge a soft-deleted entry ID (no-op if not in `deleted_ids`).
     pub fn purge_entry(&mut self, id: &str) -> bool {
         let before = self.deleted_ids.len();
         self.deleted_ids.retain(|x| x != id);
@@ -133,6 +134,7 @@ impl VaultIndex {
     }
 
     /// Get a reference to an entry by ID.
+    #[must_use] 
     pub fn get_entry(&self, id: &str) -> Option<&IndexEntry> {
         self.entries.iter().find(|e| e.id == id)
     }
@@ -176,6 +178,7 @@ impl VaultIndex {
     }
 
     /// Return all entries of a given category.
+    #[must_use] 
     pub fn entries_by_category(&self, category: &str) -> Vec<&IndexEntry> {
         self.entries
             .iter()
@@ -184,11 +187,13 @@ impl VaultIndex {
     }
 
     /// Return all favorite entries.
+    #[must_use] 
     pub fn favorites(&self) -> Vec<&IndexEntry> {
         self.entries.iter().filter(|e| e.favorite).collect()
     }
 
     /// Return entries belonging to a folder.
+    #[must_use] 
     pub fn entries_by_folder(&self, folder_id: &str) -> Vec<&IndexEntry> {
         self.entries
             .iter()
@@ -197,11 +202,13 @@ impl VaultIndex {
     }
 
     /// Number of live entries.
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether the index has zero live entries.
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -214,16 +221,45 @@ impl VaultIndex {
         self.touch();
     }
 
-    /// Remove a folder by ID.
+    /// Remove a folder by ID, including all nested sub-folders.
+    /// Entries belonging to removed folders are moved to root (no folder).
     pub fn remove_folder(&mut self, id: &str) -> bool {
-        let before = self.folders.len();
-        self.folders.retain(|f| f.id != id);
-        // Move orphaned entries to root (no folder)
-        for e in &mut self.entries {
-            if e.folder_id.as_deref() == Some(id) {
-                e.folder_id = None;
+        // Collect the folder itself plus all descendant folder IDs.
+        let mut to_remove = vec![id.to_string()];
+        loop {
+            let current_set: std::collections::HashSet<&str> =
+                to_remove.iter().map(std::string::String::as_str).collect();
+            let new_ids: Vec<String> = self
+                .folders
+                .iter()
+                .filter_map(|f| {
+                    let pid = f.parent_id.as_deref()?;
+                    if current_set.contains(pid) && !current_set.contains(f.id.as_str()) {
+                        Some(f.id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            if new_ids.is_empty() {
+                break;
             }
+            to_remove.extend(new_ids);
         }
+
+        let before = self.folders.len();
+        let remove_set: std::collections::HashSet<&str> =
+            to_remove.iter().map(std::string::String::as_str).collect();
+        self.folders.retain(|f| !remove_set.contains(f.id.as_str()));
+
+        // Move orphaned entries to root
+        for e in &mut self.entries {
+            if let Some(ref fid) = e.folder_id
+                && remove_set.contains(fid.as_str()) {
+                    e.folder_id = None;
+                }
+        }
+
         if self.folders.len() < before {
             self.touch();
             true
@@ -233,6 +269,7 @@ impl VaultIndex {
     }
 
     /// Get a reference to a folder by ID.
+    #[must_use] 
     pub fn get_folder(&self, id: &str) -> Option<&Folder> {
         self.folders.iter().find(|f| f.id == id)
     }
@@ -269,7 +306,7 @@ mod tests {
             id: id.to_string(),
             title_enc: title_enc.to_string(),
             category: category.to_string(),
-            tags: tags.iter().map(|s| s.to_string()).collect(),
+            tags: tags.iter().map(std::string::ToString::to_string).collect(),
             offset: 0,
             length: 0,
             favorite: false,
@@ -395,6 +432,38 @@ mod tests {
         // remove folder -> entries become orphaned
         assert!(idx.remove_folder("folder-1"));
         assert!(idx.get_entry("id-1").unwrap().folder_id.is_none());
+    }
+
+    #[test]
+    fn remove_folder_cascades_to_nested() {
+        let mut idx = VaultIndex::new();
+
+        // root -> child -> grandchild
+        idx.add_folder(Folder { id: "root".into(), name_enc: "r".into(), parent_id: None });
+        idx.add_folder(Folder { id: "child".into(), name_enc: "c".into(), parent_id: Some("root".into()) });
+        idx.add_folder(Folder { id: "grandchild".into(), name_enc: "gc".into(), parent_id: Some("child".into()) });
+        // unrelated folder (should survive)
+        idx.add_folder(Folder { id: "other".into(), name_enc: "o".into(), parent_id: None });
+
+        // entries in child and grandchild
+        let mut e1 = make_entry("e1", "t1", "login", &[]);
+        e1.folder_id = Some("child".into());
+        idx.upsert_entry(e1);
+
+        let mut e2 = make_entry("e2", "t2", "login", &[]);
+        e2.folder_id = Some("grandchild".into());
+        idx.upsert_entry(e2);
+
+        // remove root -> should cascade to child and grandchild
+        assert!(idx.remove_folder("root"));
+        assert!(idx.get_folder("root").is_none());
+        assert!(idx.get_folder("child").is_none());
+        assert!(idx.get_folder("grandchild").is_none());
+        assert!(idx.get_folder("other").is_some()); // unrelated survives
+
+        // entries moved to root
+        assert!(idx.get_entry("e1").unwrap().folder_id.is_none());
+        assert!(idx.get_entry("e2").unwrap().folder_id.is_none());
     }
 
     #[test]

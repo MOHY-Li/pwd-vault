@@ -13,8 +13,9 @@
 use std::io::{Cursor, Read, Write};
 
 use crate::crypto::{
-    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_master_key,
-    derive_vault_key, encrypt, generate_salt, verify_mac, verify_password, EncryptedData,
+    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key,
+    derive_master_key, derive_vault_key, encrypt, generate_salt, verify_mac,
+    verify_password, EncryptedData,
 };
 use crate::entry::Entry;
 use crate::error::{Result, VaultError};
@@ -39,7 +40,7 @@ const DEFAULT_ARGON2_PARALLELISM: u8 = 4;
 
 /// Byte size of the fixed header (before encrypted index).
 /// magic(4) + version(1) + flags(1) + memory(4) + iterations(2) +
-/// parallelism(1) + salt(32) + auth_hash(32) = 77
+/// parallelism(1) + salt(32) + `auth_hash(32)` = 77
 #[allow(dead_code)]
 const HEADER_SIZE: usize = 77;
 
@@ -142,10 +143,11 @@ impl VaultFile {
         let file_mac_pos = data.len() - 32;
 
         // Verify file MAC first (covers everything except the MAC itself)
+        let mac_key = derive_mac_key(&master_key);
         let stored_mac: &[u8] = &data[file_mac_pos..];
         let mut expected_mac_arr = [0u8; 32];
         expected_mac_arr.copy_from_slice(stored_mac);
-        if !verify_mac(&data[..file_mac_pos], &expected_mac_arr) {
+        if !verify_mac(&data[..file_mac_pos], &expected_mac_arr, &mac_key) {
             return Err(VaultError::VaultCorrupted("file MAC verification failed".into()));
         }
 
@@ -279,7 +281,7 @@ impl VaultFile {
         let mut offset_accumulator: u64 = 0;
 
         // --- encrypted entries ---
-        for idx_entry in self.index.entries.iter_mut() {
+        for idx_entry in &mut self.index.entries {
             // Find matching entry
             let entry = self
                 .entries
@@ -306,8 +308,10 @@ impl VaultFile {
             buf.extend_from_slice(&encrypted_entry.ciphertext);
         }
 
+        let mac_key = derive_mac_key(&master_key);
+
         // --- file MAC ---
-        let mac = compute_mac(&buf);
+        let mac = compute_mac(&buf, &mac_key);
         buf.extend_from_slice(&mac);
 
         // Atomic write: write to temp file then rename
@@ -398,6 +402,7 @@ impl VaultFile {
     }
 
     /// Get an entry by id (returns a cloned copy).
+    #[must_use] 
     pub fn get_entry(&self, id: &str) -> Option<Entry> {
         self.entries.iter().find(|e| e.id == id).cloned()
     }
@@ -413,11 +418,13 @@ impl VaultFile {
     }
 
     /// Return a reference to all decrypted entries.
+    #[must_use] 
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
 
     /// Search entries by query (case-insensitive title/username/url/notes/tags).
+    #[must_use] 
     pub fn search_entries(&self, query: &str) -> Vec<&Entry> {
         self.entries
             .iter()
@@ -426,11 +433,13 @@ impl VaultFile {
     }
 
     /// Number of entries.
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether vault has no entries.
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

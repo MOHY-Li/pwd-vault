@@ -39,6 +39,7 @@ pub struct DedupEngine;
 impl DedupEngine {
     /// Check a list of imported entries against existing vault entries.
     /// Returns a `DedupEntry` for each imported entry with its status.
+    #[must_use] 
     pub fn check(incoming: &[Entry], existing: &[Entry]) -> Vec<DedupEntry> {
         incoming
             .iter()
@@ -67,7 +68,7 @@ impl DedupEngine {
             return DedupStatus::New;
         }
 
-        // Look for exact duplicate: same normalized URL + same username.
+        // First pass: check for exact duplicate (same URL + same username).
         for (i, ex) in existing.iter().enumerate() {
             if ex.entry_type != EntryType::Login {
                 continue;
@@ -75,15 +76,20 @@ impl DedupEngine {
             let ex_url = normalize_url(&ex.url);
             let ex_user = ex.username.trim().to_lowercase();
 
+            if entry_url == ex_url && !entry_url.is_empty() && entry_user == ex_user && !entry_user.is_empty() {
+                return DedupStatus::Duplicate(i);
+            }
+        }
+
+        // Second pass: check for conflict (same URL, different username).
+        for (i, ex) in existing.iter().enumerate() {
+            if ex.entry_type != EntryType::Login {
+                continue;
+            }
+            let ex_url = normalize_url(&ex.url);
+
             if entry_url == ex_url && !entry_url.is_empty() {
-                if entry_user == ex_user && !entry_user.is_empty() {
-                    // Same URL + same username → exact duplicate.
-                    return DedupStatus::Duplicate(i);
-                } else if !entry_url.is_empty() {
-                    // Same URL, different username → conflict (might be a
-                    // different account on the same site).
-                    return DedupStatus::Conflict(i);
-                }
+                return DedupStatus::Conflict(i);
             }
         }
 
@@ -104,6 +110,7 @@ impl DedupEngine {
     }
 
     /// Filter incoming entries to only those that are new (no duplicates).
+    #[must_use] 
     pub fn filter_new(incoming: &[Entry], existing: &[Entry]) -> Vec<Entry> {
         Self::check(incoming, existing)
             .into_iter()
@@ -113,6 +120,7 @@ impl DedupEngine {
     }
 
     /// Count duplicates and conflicts.
+    #[must_use] 
     pub fn count_issues(incoming: &[Entry], existing: &[Entry]) -> (usize, usize) {
         let report = Self::check(incoming, existing);
         let dupes = report
@@ -149,7 +157,7 @@ fn normalize_url(url: &str) -> String {
     }
 
     // Strip everything after the first '/' or '?' or '#' to get just the domain.
-    if let Some(pos) = s.find(|c: char| c == '/' || c == '?' || c == '#') {
+    if let Some(pos) = s.find(['/', '?', '#']) {
         s.truncate(pos);
     }
 

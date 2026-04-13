@@ -45,6 +45,7 @@ pub struct AuditLog {
 
 impl AuditLog {
     /// Create a new, empty audit log with the default capacity of 500 entries.
+    #[must_use] 
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -65,12 +66,14 @@ impl AuditLog {
     }
 
     /// Return a slice of the last `count` entries (or fewer if not enough).
+    #[must_use] 
     pub fn recent(&self, count: usize) -> &[AuditEntry] {
         let start = self.entries.len().saturating_sub(count);
         &self.entries[start..]
     }
 
     /// Return a slice of all entries.
+    #[must_use] 
     pub fn all(&self) -> &[AuditEntry] {
         &self.entries
     }

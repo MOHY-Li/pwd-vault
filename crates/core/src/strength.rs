@@ -73,6 +73,7 @@ const SECS_PER_YEAR: f64 = 31_536_000.0;
 // ---------------------------------------------------------------------------
 
 /// Evaluate the strength of `password` and return a full [`StrengthReport`].
+#[must_use] 
 pub fn evaluate_password(password: &str) -> StrengthReport {
     let mut warnings: Vec<String> = Vec::new();
     let mut suggestions: Vec<String> = Vec::new();
@@ -141,6 +142,7 @@ pub fn evaluate_password(password: &str) -> StrengthReport {
 /// Estimated time to crack (seconds) at [`GUESS_RATE`] guesses/sec.
 ///
 /// `guesses = 2^entropy`, so `seconds = guesses / rate`.
+#[must_use] 
 pub fn estimate_crack_time_seconds(entropy: f64) -> f64 {
     if entropy <= 0.0 {
         return 0.0;
@@ -149,6 +151,7 @@ pub fn estimate_crack_time_seconds(entropy: f64) -> f64 {
 }
 
 /// Convert seconds into a human-readable string.
+#[must_use] 
 pub fn format_crack_time(seconds: f64) -> String {
     if seconds < 1.0 {
         "instant".into()
@@ -203,10 +206,9 @@ fn calculate_entropy(password: &str) -> f64 {
         }
     }
 
-    let pool_size: f64 = ((pool & 1 != 0) as u32 * 26
-        + ((pool >> 1) & 1 != 0) as u32 * 26
-        + ((pool >> 2) & 1 != 0) as u32 * 10
-        + ((pool >> 3) & 1 != 0) as u32 * 33) as f64;
+    let pool_size: f64 = f64::from(u32::from(pool & 1 != 0) * 26
+        + u32::from((pool >> 1) & 1 != 0) * 26
+        + u32::from((pool >> 2) & 1 != 0) * 10 + u32::from((pool >> 3) & 1 != 0) * 33);
 
     if pool_size <= 1.0 {
         // e.g. single repeated char → at most 1 bit of info

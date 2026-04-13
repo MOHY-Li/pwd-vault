@@ -20,10 +20,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 pub struct MasterKey([u8; 32]);
 
 impl MasterKey {
+    #[must_use] 
     pub fn new(key: [u8; 32]) -> Self {
         Self(key)
     }
 
+    #[must_use] 
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
@@ -45,6 +47,7 @@ pub struct EncryptedData {
 // ---------------------------------------------------------------------------
 
 /// Generate a cryptographically random 32-byte salt.
+#[must_use] 
 pub fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
     getrandom::fill(&mut salt).expect("failed to generate random salt");
@@ -85,6 +88,7 @@ pub fn derive_master_key(password: &str, salt: &[u8; 32]) -> Result<MasterKey> {
 }
 
 /// Derive a 256-bit authentication hash from the master key (HKDF-SHA256).
+#[must_use] 
 pub fn derive_auth_hash(master_key: &MasterKey) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
     let mut out = [0u8; 32];
@@ -94,6 +98,7 @@ pub fn derive_auth_hash(master_key: &MasterKey) -> [u8; 32] {
 }
 
 /// Derive a 256-bit vault encryption key from the master key (HKDF-SHA256).
+#[must_use] 
 pub fn derive_vault_key(master_key: &MasterKey) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
     let mut out = [0u8; 32];
@@ -103,7 +108,8 @@ pub fn derive_vault_key(master_key: &MasterKey) -> [u8; 32] {
 }
 
 /// Derive a per-entry encryption key from a key seed and entry identifier
-/// (HKDF-SHA256 with entry_id as info).
+/// (HKDF-SHA256 with `entry_id` as info).
+#[must_use] 
 pub fn derive_entry_key(key_seed: &[u8; 32], entry_id: &[u8]) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, key_seed);
     let mut out = [0u8; 32];
@@ -163,17 +169,31 @@ pub fn verify_password(
 }
 
 // ---------------------------------------------------------------------------
-// MAC — BLAKE3
+// MAC — BLAKE3 keyed hash
 // ---------------------------------------------------------------------------
 
-/// Compute a BLAKE3 MAC over arbitrary data.
-pub fn compute_mac(data: &[u8]) -> [u8; 32] {
-    *blake3::hash(data).as_bytes()
+/// Derive a 256-bit MAC key from the master key via HKDF-SHA256.
+#[must_use]
+pub fn derive_mac_key(master_key: &MasterKey) -> [u8; 32] {
+    use hkdf::Hkdf;
+    use sha2::Sha256;
+    let hkdf = Hkdf::<Sha256>::new(None, master_key.as_bytes());
+    let mut out = [0u8; 32];
+    hkdf.expand(b"pwd-vault-mac-key", &mut out)
+        .expect("32 bytes is a valid HKDF output length");
+    out
 }
 
-/// Verify data against an expected BLAKE3 MAC using constant-time comparison.
-pub fn verify_mac(data: &[u8], expected: &[u8; 32]) -> bool {
-    let computed = compute_mac(data);
+/// Compute a BLAKE3 keyed MAC over arbitrary data.
+#[must_use]
+pub fn compute_mac(data: &[u8], mac_key: &[u8; 32]) -> [u8; 32] {
+    *blake3::keyed_hash(mac_key, data).as_bytes()
+}
+
+/// Verify data against an expected BLAKE3 keyed MAC using constant-time comparison.
+#[must_use]
+pub fn verify_mac(data: &[u8], expected: &[u8; 32], mac_key: &[u8; 32]) -> bool {
+    let computed = compute_mac(data, mac_key);
     computed.ct_eq(expected).into()
 }
 
@@ -328,31 +348,35 @@ mod tests {
     #[test]
     fn compute_mac_deterministic() {
         let data = b"some data to mac";
-        let m1 = compute_mac(data);
-        let m2 = compute_mac(data);
+        let key = [0xAB_u8; 32];
+        let m1 = compute_mac(data, &key);
+        let m2 = compute_mac(data, &key);
         assert_eq!(m1, m2);
     }
 
     #[test]
     fn verify_mac_correct() {
         let data = b"some data to mac";
-        let mac = compute_mac(data);
-        assert!(verify_mac(data, &mac));
+        let key = [0xAB_u8; 32];
+        let mac = compute_mac(data, &key);
+        assert!(verify_mac(data, &mac, &key));
     }
 
     #[test]
     fn verify_mac_wrong_data() {
         let data = b"some data to mac";
-        let mac = compute_mac(data);
-        assert!(!verify_mac(b"tampered data", &mac));
+        let key = [0xAB_u8; 32];
+        let mac = compute_mac(data, &key);
+        assert!(!verify_mac(b"tampered data", &mac, &key));
     }
 
     #[test]
     fn verify_mac_wrong_expected() {
         let data = b"some data to mac";
-        let _mac = compute_mac(data);
+        let key = [0xAB_u8; 32];
+        let _mac = compute_mac(data, &key);
         let wrong_mac = [0u8; 32];
-        assert!(!verify_mac(data, &wrong_mac));
+        assert!(!verify_mac(data, &wrong_mac, &key));
     }
 
     // ---- salt generation uniqueness ----

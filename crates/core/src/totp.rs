@@ -11,7 +11,7 @@ fn to_totp_rs_algorithm(algo: &TotpAlgorithm) -> totp_rs::Algorithm {
 }
 
 /// Map the totp-rs algorithm enum back to ours.
-fn from_totp_rs_algorithm(algo: &totp_rs::Algorithm) -> TotpAlgorithm {
+fn from_totp_rs_algorithm(algo: totp_rs::Algorithm) -> TotpAlgorithm {
     match algo {
         totp_rs::Algorithm::SHA1 => TotpAlgorithm::Sha1,
         totp_rs::Algorithm::SHA256 => TotpAlgorithm::Sha256,
@@ -32,7 +32,7 @@ pub fn generate_totp(config: &TotpConfig) -> Result<String> {
         algorithm,
         config.digits as usize,
         1, // skew: allow ±1 step for clock drift
-        config.period as u64,
+        u64::from(config.period),
         secret,
         None,           // issuer – not needed for generation
         String::new(),  // account_name – not needed for generation
@@ -48,13 +48,14 @@ pub fn generate_totp(config: &TotpConfig) -> Result<String> {
 /// Return the number of seconds remaining until the current TOTP code expires.
 ///
 /// The value is always in `1..=config.period`.
+#[must_use] 
 pub fn time_remaining(config: &TotpConfig) -> u32 {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
 
-    let period = config.period as u64;
+    let period = u64::from(config.period);
     let remaining = period - (secs % period);
     remaining as u32
 }
@@ -74,9 +75,9 @@ pub fn parse_totp_uri(uri: &str) -> Result<TotpConfig> {
 
     Ok(TotpConfig {
         secret: totp.get_secret_base32(),
-        algorithm: from_totp_rs_algorithm(&totp.algorithm),
-        digits: totp.digits as u32,
-        period: totp.step as u32,
+        algorithm: from_totp_rs_algorithm(totp.algorithm),
+        digits: totp.digits as u32, // max 8, safe truncation
+        period: totp.step as u32,   // typically 30, safe truncation
     })
 }
 

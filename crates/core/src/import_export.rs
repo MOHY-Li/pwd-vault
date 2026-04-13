@@ -27,7 +27,7 @@ pub enum ExportFormat {
 // ---------------------------------------------------------------------------
 
 /// Parse data according to `format` and return a list of entries.
-pub fn import_entries(format: ImportFormat, data: &str) -> Result<Vec<Entry>> {
+pub fn import_entries(format: &ImportFormat, data: &str) -> Result<Vec<Entry>> {
     match format {
         ImportFormat::Json => import_json(data),
         ImportFormat::Csv => import_csv(data),
@@ -43,7 +43,7 @@ pub fn import_entries(format: ImportFormat, data: &str) -> Result<Vec<Entry>> {
 // ---------------------------------------------------------------------------
 
 /// Serialise entries into the requested format and return the resulting string.
-pub fn export_entries(entries: &[Entry], format: ExportFormat) -> Result<String> {
+pub fn export_entries(entries: &[Entry], format: &ExportFormat) -> Result<String> {
     match format {
         ExportFormat::Json => export_json(entries),
         ExportFormat::Csv => export_csv(entries),
@@ -61,6 +61,7 @@ pub fn export_entries(entries: &[Entry], format: ExportFormat) -> Result<String>
 // ---------------------------------------------------------------------------
 
 /// Try to guess the import format from the data and an optional filename hint.
+#[must_use] 
 pub fn detect_format(data: &str, filename: Option<&str>) -> ImportFormat {
     let fname = filename.unwrap_or("").to_lowercase();
 
@@ -171,24 +172,22 @@ fn import_bitwarden_json(data: &str) -> Result<Vec<Entry>> {
         if let Some(login) = item.get("login") {
             e.username = login["username"].as_str().unwrap_or("").to_string();
             e.password = login["password"].as_str().unwrap_or("").to_string();
-            if let Some(uris) = login.get("uris").and_then(|u| u.as_array()) {
-                if let Some(first_uri) = uris.first() {
+            if let Some(uris) = login.get("uris").and_then(|u| u.as_array())
+                && let Some(first_uri) = uris.first() {
                     e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
                 }
-            }
         }
 
         e.notes = item["notes"].as_str().unwrap_or("").to_string();
 
         // folder
-        if let Some(folder) = item.get("folderName").and_then(|f| f.as_str()) {
-            if !folder.is_empty() {
+        if let Some(folder) = item.get("folderName").and_then(|f| f.as_str())
+            && !folder.is_empty() {
                 e.folder = Some(folder.to_string());
             }
-        }
 
         // favorite
-        if let Some(fav) = item.get("favorite").and_then(|f| f.as_bool()) {
+        if let Some(fav) = item.get("favorite").and_then(serde_json::Value::as_bool) {
             e.favorite = fav;
         }
 
@@ -288,10 +287,10 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
         if in_entry && (trimmed.starts_with("</Entry>") || trimmed == "</Entry>") {
             in_entry = false;
             let mut e = Entry::new(title.clone(), EntryType::Login);
-            e.username = username.clone();
-            e.password = password.clone();
-            e.url = url.clone();
-            e.notes = notes.clone();
+            e.username.clone_from(&username);
+            e.password.clone_from(&password);
+            e.url.clone_from(&url);
+            e.notes.clone_from(&notes);
             entries.push(e);
             continue;
         }
@@ -320,7 +319,7 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
     Ok(entries)
 }
 
-/// Extract a KeePass XML value tag like `<Value>foo</Value>` that appears
+/// Extract a `KeePass` XML value tag like `<Value>foo</Value>` that appears
 /// after a `<Key>FieldName</Key>` in the preceding lines.  Because we process
 /// line-by-line we rely on the common layout where Key and Value are adjacent.
 /// Here we simply look for `<Value>...</Value>` on the given line.
@@ -403,8 +402,8 @@ mod tests {
     #[test]
     fn test_json_roundtrip() {
         let entries = vec![sample_entry()];
-        let exported = export_entries(&entries, ExportFormat::Json).unwrap();
-        let imported = import_entries(ImportFormat::Json, &exported).unwrap();
+        let exported = export_entries(&entries, &ExportFormat::Json).unwrap();
+        let imported = import_entries(&ImportFormat::Json, &exported).unwrap();
         assert_eq!(imported.len(), 1);
         assert_eq!(imported[0].title, "Test Site");
         assert_eq!(imported[0].username, "alice");
@@ -416,8 +415,8 @@ mod tests {
     #[test]
     fn test_csv_export_import() {
         let entries = vec![sample_entry()];
-        let exported = export_entries(&entries, ExportFormat::Csv).unwrap();
-        let imported = import_entries(ImportFormat::Csv, &exported).unwrap();
+        let exported = export_entries(&entries, &ExportFormat::Csv).unwrap();
+        let imported = import_entries(&ImportFormat::Csv, &exported).unwrap();
         assert_eq!(imported.len(), 1);
         assert_eq!(imported[0].title, "Test Site");
         assert_eq!(imported[0].username, "alice");
