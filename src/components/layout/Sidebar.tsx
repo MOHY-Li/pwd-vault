@@ -10,8 +10,10 @@ import {
   setEditingEntry,
   setEditingIsNew,
   setShowGenerator,
+  setShowTrash,
+  setShowAuditLog,
+  setShowImportExport,
   lockVault,
-  deleteEntry,
 } from "../../stores/vault";
 import type { Entry } from "../../api";
 
@@ -149,20 +151,38 @@ export default function Sidebar() {
         >
           <span>＋</span> 新建条目
         </button>
-        <div class="flex gap-2">
+        <div class="grid grid-cols-2 gap-1.5">
           <button
             onClick={() => setShowGenerator(true)}
-            class="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
           >
-            🔧 密码生成器
+            🔧 生成器
           </button>
           <button
-            onClick={() => lockVault()}
-            class="flex-1 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+            onClick={() => setShowImportExport(true)}
+            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
           >
-            🔒 锁定
+            📦 导入导出
+          </button>
+          <button
+            onClick={() => setShowTrash(true)}
+            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+          >
+            🗑️ 回收站
+          </button>
+          <button
+            onClick={() => setShowAuditLog(true)}
+            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+          >
+            📋 审计日志
           </button>
         </div>
+        <button
+          onClick={() => lockVault()}
+          class="w-full rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+        >
+          🔒 锁定
+        </button>
       </div>
     </div>
   );

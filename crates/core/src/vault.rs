@@ -12,6 +12,7 @@
 
 use std::io::{Cursor, Read, Write};
 
+use base64::Engine;
 use crate::crypto::{
     compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key,
     derive_master_key, derive_vault_key, encrypt, generate_salt, verify_mac,
@@ -60,8 +61,10 @@ pub struct VaultFile {
     pub salt: [u8; 32],
     /// The decrypted index (entry metadata + folders).
     pub index: VaultIndex,
-    /// Decrypted entries keyed by entry id.
+    /// Decrypted live entries.
     entries: Vec<Entry>,
+    /// Soft-deleted entries kept for recycle bin.
+    deleted_entries: Vec<Entry>,
 }
 
 impl VaultFile {
@@ -84,6 +87,7 @@ impl VaultFile {
             salt,
             index: VaultIndex::new(),
             entries: Vec::new(),
+            deleted_entries: Vec::new(),
         })
     }
 
@@ -225,6 +229,7 @@ impl VaultFile {
             salt,
             index,
             entries,
+            deleted_entries: Vec::new(),
         })
     }
 
@@ -404,14 +409,65 @@ impl VaultFile {
         self.entries.iter().find(|e| e.id == id).cloned()
     }
 
-    /// Soft-delete an entry by id.
+    /// Soft-delete an entry by id (moves to recycle bin).
     pub fn delete_entry(&mut self, id: &str) -> bool {
-        if self.index.remove_entry(id) {
-            self.entries.retain(|e| e.id != id);
+        if let Some(pos) = self.entries.iter().position(|e| e.id == id) {
+            let entry = self.entries.swap_remove(pos);
+            self.deleted_entries.push(entry);
+            self.index.remove_entry(id);
             true
         } else {
             false
         }
+    }
+
+    /// List all soft-deleted entries (recycle bin).
+    #[must_use]
+    pub fn list_deleted(&self) -> &[Entry] {
+        &self.deleted_entries
+    }
+
+    /// Restore a soft-deleted entry back to live entries.
+    pub fn restore_entry(&mut self, id: &str) -> bool {
+        if let Some(pos) = self.deleted_entries.iter().position(|e| e.id == id) {
+            let entry = self.deleted_entries.swap_remove(pos);
+            let idx_entry = IndexEntry {
+                id: entry.id.clone(),
+                title_enc: base64::engine::general_purpose::STANDARD.encode(&entry.title),
+                category: format!("{:?}", entry.entry_type).to_lowercase(),
+                tags: entry.tags.clone(),
+                offset: 0,
+                length: 0,
+                favorite: entry.favorite,
+                folder_id: entry.folder.clone(),
+                created: entry.created,
+                modified: entry.modified,
+            };
+            self.index.upsert_entry(idx_entry);
+            self.entries.push(entry);
+            // Remove from deleted_ids if present
+            self.index.deleted_ids.retain(|d| d != id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Permanently remove a soft-deleted entry.
+    pub fn purge_entry(&mut self, id: &str) -> bool {
+        if let Some(pos) = self.deleted_entries.iter().position(|e| e.id == id) {
+            self.deleted_entries.swap_remove(pos);
+            self.index.purge_entry(id);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Empty the recycle bin entirely.
+    pub fn empty_trash(&mut self) {
+        self.deleted_entries.clear();
+        self.index.deleted_ids.clear();
     }
 
     /// Return a reference to all decrypted entries.

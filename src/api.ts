@@ -48,6 +48,23 @@ export interface StrengthReport {
   label: string;
 }
 
+export interface AuditEntry {
+  timestamp: string;
+  event_type: AuditEvent;
+}
+
+export type AuditEvent =
+  | { VaultCreated: void }
+  | { VaultOpened: void }
+  | { VaultLocked: void }
+  | { EntryViewed: { entry_id: string } }
+  | { EntryCreated: { entry_id: string } }
+  | { EntryUpdated: { entry_id: string } }
+  | { EntryDeleted: { entry_id: string } }
+  | { PasswordCopied: { entry_id: string } }
+  | { DataExported: void }
+  | { DataImported: { count: number } };
+
 // ---------------------------------------------------------------------------
 // Vault lifecycle
 // ---------------------------------------------------------------------------
@@ -76,8 +93,8 @@ export async function vaultIsOpen(): Promise<boolean> {
 // Entry CRUD
 // ---------------------------------------------------------------------------
 
-export async function entryAdd(entry: Entry): Promise<void> {
-  await invoke("entry_add", { entryJson: JSON.stringify(entry) });
+export async function entryAdd(entry: Entry): Promise<string> {
+  return await invoke<string>("entry_add", { entryJson: JSON.stringify(entry) });
 }
 
 export async function entryUpdate(entry: Entry): Promise<void> {
@@ -133,5 +150,69 @@ export async function generatePassword(opts: {
 
 export async function evaluateStrength(password: string): Promise<StrengthReport> {
   const raw = await invoke<string>("evaluate_strength", { password });
+  return JSON.parse(raw);
+}
+
+// ---------------------------------------------------------------------------
+// TOTP
+// ---------------------------------------------------------------------------
+
+export async function totpGenerate(entryId: string): Promise<string> {
+  return await invoke<string>("totp_generate", { entryId });
+}
+
+export async function totpTimeRemaining(entryId: string): Promise<number> {
+  return await invoke<number>("totp_time_remaining", { entryId });
+}
+
+export async function totpParseUri(uri: string): Promise<TotpConfig> {
+  const raw = await invoke<string>("totp_parse_uri", { uri });
+  return JSON.parse(raw);
+}
+
+// ---------------------------------------------------------------------------
+// Import / Export
+// ---------------------------------------------------------------------------
+
+export async function vaultImport(format: string, data: string): Promise<number> {
+  const count = await invoke<string>("vault_import", { format, data });
+  return parseInt(count, 10);
+}
+
+export async function vaultExport(format: string): Promise<string> {
+  return await invoke<string>("vault_export", { format });
+}
+
+export async function detectImportFormat(data: string, filename?: string): Promise<string> {
+  return await invoke<string>("detect_import_format", { data, filename: filename ?? null });
+}
+
+// ---------------------------------------------------------------------------
+// Recycle bin
+// ---------------------------------------------------------------------------
+
+export async function trashList(): Promise<Entry[]> {
+  const raw = await invoke<string>("trash_list");
+  return JSON.parse(raw);
+}
+
+export async function entryRestore(id: string): Promise<void> {
+  await invoke("entry_restore", { id });
+}
+
+export async function entryPurge(id: string): Promise<void> {
+  await invoke("entry_purge", { id });
+}
+
+export async function trashEmpty(): Promise<void> {
+  await invoke("trash_empty");
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+export async function auditRecent(count: number): Promise<AuditEntry[]> {
+  const raw = await invoke<string>("audit_recent", { count });
   return JSON.parse(raw);
 }

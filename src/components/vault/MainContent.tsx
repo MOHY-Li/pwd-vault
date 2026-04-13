@@ -1,11 +1,16 @@
-import { Show, createSignal } from "solid-js";
-import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, saveVault } from "../../stores/vault";
+import { Show, createSignal, createEffect, onCleanup } from "solid-js";
+import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, saveVault, totpCodes, refreshTotp, resetAutoLockTimer } from "../../stores/vault";
 import EntryEditor from "../vault/EntryEditor";
 import PasswordGen from "../generator/PasswordGen";
 
 export default function MainContent() {
   const [showPassword, setShowPassword] = createSignal(false);
   const [copied, setCopied] = createSignal("");
+
+  // Reset auto-lock on any interaction
+  createEffect(() => {
+    resetAutoLockTimer();
+  });
 
   const selectedEntry = () => entries.find((e) => e.id === selectedEntryId());
 
@@ -107,6 +112,10 @@ export default function MainContent() {
                   </div>
                 </div>
               </Show>
+
+              <Show when={entry().totp}>
+                <TotpDisplay entryId={entry().id} />
+              </Show>
             </div>
           </div>
         )}
@@ -151,6 +160,48 @@ function FieldRow(props: {
           class="text-zinc-500 transition-colors hover:text-zinc-300"
         >
           {props.copied ? "✅" : "📋"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TotpDisplay(props: { entryId: string }) {
+  const [copied, setCopied] = createSignal(false);
+
+  createEffect(() => {
+    refreshTotp(props.entryId);
+    const interval = setInterval(() => refreshTotp(props.entryId), 5000);
+    onCleanup(() => clearInterval(interval));
+  });
+
+  const code = () => totpCodes()[props.entryId]?.code ?? "";
+  const remaining = () => totpCodes()[props.entryId]?.remaining ?? 0;
+
+  function handleCopy() {
+    if (code()) {
+      navigator.clipboard.writeText(code());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
+  return (
+    <div>
+      <label class="mb-1 block text-xs font-medium text-zinc-400">TOTP 验证码</label>
+      <div class="flex items-center gap-3 rounded-lg bg-zinc-800 px-3 py-2">
+        <span class="font-mono text-2xl tracking-widest text-emerald-400">
+          {code() || "------"}
+        </span>
+        <div class="flex-1" />
+        <div class="text-xs text-zinc-500">
+          {remaining()}s
+        </div>
+        <button
+          onClick={handleCopy}
+          class="text-zinc-500 transition-colors hover:text-zinc-300"
+        >
+          {copied() ? "✅" : "📋"}
         </button>
       </div>
     </div>

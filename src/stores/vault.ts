@@ -1,5 +1,5 @@
 /// SolidJS stores for app-wide state management.
-import { createSignal } from "solid-js";
+import { createSignal, createEffect } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { Entry } from "../api";
 import * as api from "../api";
@@ -34,6 +34,7 @@ export async function lockVault() {
   setMasterPassword("");
   setIsUnlocked(false);
   setEntries([]);
+  setTrash([]);
 }
 
 export async function saveVault() {
@@ -52,10 +53,11 @@ export async function refreshEntries() {
   setEntries(list);
 }
 
-export async function addEntry(entry: Entry) {
-  await api.entryAdd(entry);
+export async function addEntry(entry: Entry): Promise<string> {
+  const id = await api.entryAdd(entry);
   await saveVault();
   await refreshEntries();
+  return id;
 }
 
 export async function updateEntry(entry: Entry) {
@@ -68,6 +70,55 @@ export async function deleteEntry(id: string) {
   await api.entryDelete(id);
   await saveVault();
   await refreshEntries();
+  await refreshTrash();
+}
+
+// ---------------------------------------------------------------------------
+// Recycle bin store
+// ---------------------------------------------------------------------------
+
+const [trash, setTrash] = createStore<Entry[]>([]);
+export { trash };
+
+export async function refreshTrash() {
+  const list = await api.trashList();
+  setTrash(list);
+}
+
+export async function restoreEntry(id: string) {
+  await api.entryRestore(id);
+  await saveVault();
+  await refreshEntries();
+  await refreshTrash();
+}
+
+export async function purgeEntry(id: string) {
+  await api.entryPurge(id);
+  await saveVault();
+  await refreshTrash();
+}
+
+export async function emptyTrash() {
+  await api.trashEmpty();
+  await saveVault();
+  setTrash([]);
+}
+
+// ---------------------------------------------------------------------------
+// TOTP store
+// ---------------------------------------------------------------------------
+
+const [totpCodes, setTotpCodes] = createSignal<Record<string, { code: string; remaining: number }>>({});
+export { totpCodes };
+
+export async function refreshTotp(entryId: string) {
+  try {
+    const code = await api.totpGenerate(entryId);
+    const remaining = await api.totpTimeRemaining(entryId);
+    setTotpCodes((prev) => ({ ...prev, [entryId]: { code, remaining } }));
+  } catch {
+    // Entry may not have TOTP configured
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -80,3 +131,30 @@ export const [sidebarFilter, setSidebarFilter] = createSignal<"all" | "favorites
 export const [editingEntry, setEditingEntry] = createSignal<Entry | null>(null);
 export const [editingIsNew, setEditingIsNew] = createSignal(false);
 export const [showGenerator, setShowGenerator] = createSignal(false);
+export const [showImportExport, setShowImportExport] = createSignal(false);
+export const [showAuditLog, setShowAuditLog] = createSignal(false);
+export const [showTrash, setShowTrash] = createSignal(false);
+
+// ---------------------------------------------------------------------------
+// Auto-lock timer
+// ---------------------------------------------------------------------------
+
+const [autoLockMinutes, setAutoLockMinutes] = createSignal(5);
+export { autoLockMinutes, setAutoLockMinutes };
+
+let autoLockTimer: ReturnType<typeof setTimeout> | null = null;
+
+export function resetAutoLockTimer() {
+  if (autoLockTimer) clearTimeout(autoLockTimer);
+  const mins = autoLockMinutes();
+  if (mins > 0 && isUnlocked()) {
+    autoLockTimer = setTimeout(() => {
+      lockVault();
+    }, mins * 60 * 1000);
+  }
+}
+
+export function setAutoLock(minutes: number) {
+  setAutoLockMinutes(minutes);
+  resetAutoLockTimer();
+}

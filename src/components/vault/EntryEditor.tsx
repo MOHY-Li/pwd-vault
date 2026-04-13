@@ -1,6 +1,6 @@
 import { Show, createSignal } from "solid-js";
 import { editingEntry, setEditingEntry, editingIsNew, addEntry, updateEntry } from "../../stores/vault";
-import { generatePassword, evaluateStrength } from "../../api";
+import { generatePassword, evaluateStrength, totpParseUri } from "../../api";
 import type { Entry, StrengthReport } from "../../api";
 
 export default function EntryEditor() {
@@ -202,6 +202,32 @@ export default function EntryEditor() {
               />
               <span class="text-zinc-300">收藏此条目</span>
             </label>
+
+            {/* TOTP URI */}
+            <div>
+              <label class="mb-1 block text-xs text-zinc-400">TOTP 验证码 URI（可选）</label>
+              <input
+                type="text"
+                value={entry()?.totp?.secret ? `otpauth://totp/...` : ""}
+                onInput={async (e) => {
+                  const uri = e.currentTarget.value.trim();
+                  if (uri.startsWith("otpauth://")) {
+                    try {
+                      const config = await totpParseUri(uri);
+                      const e = entry();
+                      if (e) setForm({ ...e, totp: config });
+                    } catch {
+                      // Invalid URI, ignore
+                    }
+                  }
+                }}
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-xs text-zinc-100 focus:border-emerald-500 focus:outline-none"
+                placeholder="otpauth://totp/..."
+              />
+              <Show when={entry()?.totp}>
+                <div class="mt-1 text-xs text-emerald-400">✅ TOTP 已配置</div>
+              </Show>
+            </div>
           </div>
 
           {/* Actions */}
