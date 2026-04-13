@@ -1,0 +1,17 @@
+[package]
+name = "pwd-vault-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Pwd-Vault password manager application"
+
+[dependencies]
+pwd-vault-core = { path = "../crates/core" }
+pwd-vault-tauri-plugin = { path = "../crates/tauri-plugin" }
+tauri = { version = "2", features = [] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
