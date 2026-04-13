@@ -1,16 +1,9 @@
 import { Show, createSignal, createEffect, onCleanup } from "solid-js";
-import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, saveVault, totpCodes, refreshTotp, resetAutoLockTimer } from "../../stores/vault";
-import EntryEditor from "../vault/EntryEditor";
-import PasswordGen from "../generator/PasswordGen";
+import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, totpCodes, refreshTotp } from "../../stores/vault";
 
 export default function MainContent() {
   const [showPassword, setShowPassword] = createSignal(false);
   const [copied, setCopied] = createSignal("");
-
-  // Reset auto-lock on any interaction
-  createEffect(() => {
-    resetAutoLockTimer();
-  });
 
   const selectedEntry = () => entries.find((e) => e.id === selectedEntryId());
 

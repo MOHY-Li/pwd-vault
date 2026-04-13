@@ -29,6 +29,9 @@ pub struct VaultIndex {
     pub entries: Vec<IndexEntry>,
     /// IDs of soft-deleted entries (kept for dedup and possible restore).
     pub deleted_ids: Vec<String>,
+    /// Serialised soft-deleted entries (encrypted alongside the rest of the index).
+    #[serde(default)]
+    pub deleted_entries_json: String,
     /// Folder hierarchy.
     pub folders: Vec<Folder>,
 }
@@ -89,6 +92,7 @@ impl VaultIndex {
             modified: now,
             entries: Vec::new(),
             deleted_ids: Vec::new(),
+            deleted_entries_json: String::new(),
             folders: Vec::new(),
         }
     }

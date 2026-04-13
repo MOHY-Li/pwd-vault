@@ -8,7 +8,6 @@ use crate::error::{Result, VaultError};
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "snake_case")]
 pub enum AuditEventType {
     VaultCreated,
     VaultOpened,

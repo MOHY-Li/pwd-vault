@@ -1,4 +1,4 @@
-import { Show, createSignal } from "solid-js";
+import { Show, createSignal, createEffect } from "solid-js";
 import { editingEntry, setEditingEntry, editingIsNew, addEntry, updateEntry } from "../../stores/vault";
 import { generatePassword, evaluateStrength, totpParseUri } from "../../api";
 import type { Entry, StrengthReport } from "../../api";
@@ -45,17 +45,17 @@ export default function EntryEditor() {
   }
 
   // Monitor editingEntry changes
-  const src = editingEntry();
-  if (src && !form()) {
-    setForm({ ...src });
-  }
+  createEffect(() => {
+    const src = editingEntry();
+    if (src) setForm({ ...src });
+  });
 
   return (
     <Show when={editingEntry()}>
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
           <div class="mb-4 flex items-center justify-between">
-            <h3 class="text-lg font-bold">{editingEntry()?.title ? "编辑条目" : "新建条目"}</h3>
+            <h3 class="text-lg font-bold">{editingIsNew() ? "新建条目" : "编辑条目"}</h3>
             <button
               onClick={() => { setEditingEntry(null); setForm(null); }}
               class="text-zinc-500 hover:text-zinc-300"
@@ -214,8 +214,8 @@ export default function EntryEditor() {
                   if (uri.startsWith("otpauth://")) {
                     try {
                       const config = await totpParseUri(uri);
-                      const e = entry();
-                      if (e) setForm({ ...e, totp: config });
+                      const ent = entry();
+                      if (ent) setForm({ ...ent, totp: config });
                     } catch {
                       // Invalid URI, ignore
                     }

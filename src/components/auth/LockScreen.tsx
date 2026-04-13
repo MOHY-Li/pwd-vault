@@ -1,5 +1,6 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, onMount } from "solid-js";
 import { createVault, unlockVault } from "../../stores/vault";
+import { appDataDir } from "@tauri-apps/api/path";
 
 export default function LockScreen() {
   const [password, setPassword] = createSignal("");
@@ -7,13 +8,12 @@ export default function LockScreen() {
   const [isSetup, setIsSetup] = createSignal(true);
   const [error, setError] = createSignal("");
   const [loading, setLoading] = createSignal(false);
+  const [defaultPath, setDefaultPath] = createSignal("");
 
-  // Default vault path
-  const defaultPath = () => {
-    // In Tauri, we'll use the app data directory
-    // For now, use a reasonable default
-    return "~/pwd-vault-data/my.vault";
-  };
+  onMount(async () => {
+    const dir = await appDataDir();
+    setDefaultPath(dir + "my.vault");
+  });
 
   async function handleSubmit(e: Event) {
     e.preventDefault();

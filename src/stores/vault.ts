@@ -158,3 +158,9 @@ export function setAutoLock(minutes: number) {
   setAutoLockMinutes(minutes);
   resetAutoLockTimer();
 }
+
+export function initAutoLockListener() {
+  const events = ["mousemove", "keydown", "mousedown", "touchstart"];
+  const handler = () => resetAutoLockTimer();
+  events.forEach(e => document.addEventListener(e, handler, { passive: true }));
+}

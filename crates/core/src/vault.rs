@@ -222,6 +222,13 @@ impl VaultFile {
             entries.push(entry);
         }
 
+        let deleted_entries: Vec<Entry> = if index.deleted_entries_json.is_empty() {
+            Vec::new()
+        } else {
+            serde_json::from_str(&index.deleted_entries_json)
+                .unwrap_or_default()
+        };
+
         Ok(Self {
             argon2_memory_mib,
             argon2_iterations,
@@ -229,7 +236,7 @@ impl VaultFile {
             salt,
             index,
             entries,
-            deleted_entries: Vec::new(),
+            deleted_entries,
         })
     }
 
@@ -274,7 +281,23 @@ impl VaultFile {
             entry_blobs.push(blob);
         }
 
-        // === Phase 2: serialize index (now with correct offsets) ===
+        // === Phase 2: serialize deleted entries into index, then serialize index ===
+        self.index.deleted_entries_json = serde_json::to_string(&self.deleted_entries)
+            .map_err(|e| VaultError::Serialization(e.to_string()))?;
+
+        // Compute absolute offsets BEFORE serializing the index.
+        // Header: 4(magic) + 1(ver) + 1(flags) + 4(mem) + 4(iter) + 1(par) + 32(salt) + 32(auth_hash) = 79 bytes
+        // Index section: 24(nonce) + 4(ct_len) + encrypted_index.ciphertext.len()
+        // We need to encrypt first to know ciphertext size.
+        let index_bytes = self.index.to_json_bytes()?;
+        let encrypted_index = encrypt(&index_bytes, &vault_key)?;
+
+        let data_section_start: u64 = 79 + 24 + 4 + encrypted_index.ciphertext.len() as u64;
+        for idx_entry in &mut self.index.entries {
+            idx_entry.offset += data_section_start;
+        }
+
+        // Re-serialize index with correct absolute offsets.
         let index_bytes = self.index.to_json_bytes()?;
         let encrypted_index = encrypt(&index_bytes, &vault_key)?;
 
@@ -298,13 +321,6 @@ impl VaultFile {
         let idx_ct_len = encrypted_index.ciphertext.len() as u32;
         buf.extend_from_slice(&idx_ct_len.to_le_bytes());
         buf.extend_from_slice(&encrypted_index.ciphertext);
-
-        // Fix up offsets: they were relative to data section start,
-        // now make them absolute file offsets.
-        let data_section_start = buf.len() as u64;
-        for idx_entry in &mut self.index.entries {
-            idx_entry.offset += data_section_start;
-        }
 
         // --- entry data section ---
         for blob in &entry_blobs {
