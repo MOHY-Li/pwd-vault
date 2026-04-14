@@ -224,17 +224,17 @@ export default function MainContent() {
                         {entry().notes || "无备注内容"}
                       </div>
                     </div>
-                    <Show when={entry().custom_fields?.length > 0}>
+                    <Show when={entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话").length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="自定义字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        <For each={entry().custom_fields}>{(f: CustomField, i: () => number) => (
+                        <For each={entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话")}>{(f: CustomField, i: () => number) => (
                           <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
                         )}</For>
                       </div>
                     </Show>
-                    <Show when={!entry().custom_fields?.length}>
+                    <Show when={!entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话").length}>
                       <div class="rounded-lg border border-dashed border-zinc-800 p-3 text-center text-[11px] text-zinc-600">
-                        暂无自定义字段，编辑条目可添加电话、地址等信息
+                        暂无自定义字段，编辑条目可添加更多信息
                       </div>
                     </Show>
                   </div>
