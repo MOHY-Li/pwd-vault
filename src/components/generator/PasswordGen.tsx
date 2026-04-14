@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount } from "solid-js";
+import { createSignal, Show, onMount, For } from "solid-js";
 import { Wrench, X, Check, Copy, RefreshCw } from "lucide-solid";
 import { generatePassword, evaluateStrength } from "../../api";
 import type { StrengthReport } from "../../api";
@@ -126,14 +126,16 @@ export default function PasswordGen() {
             <div>
               <label class="mb-1 block text-xs text-zinc-400">分隔符</label>
               <div class="flex gap-2">
-                {["-", " ", ".", "_"].map((sep) => (
-                  <button
-                    class={`rounded-lg px-3 py-1 text-xs ${separator() === sep ? "bg-emerald-600 text-white" : "bg-zinc-800 text-zinc-400"}`}
-                    onClick={() => setSeparator(sep)}
-                  >
-                    {sep === " " ? "空格" : sep}
-                  </button>
-                ))}
+                <For each={["-", " ", ".", "_"]}>
+                  {(sep) => (
+                    <button
+                      class={`rounded-lg px-3 py-1 text-xs ${separator() === sep ? "bg-emerald-600 text-white" : "bg-zinc-800 text-zinc-400"}`}
+                      onClick={() => setSeparator(sep)}
+                    >
+                      {sep === " " ? "空格" : sep}
+                    </button>
+                  )}
+                </For>
               </div>
             </div>
           </div>

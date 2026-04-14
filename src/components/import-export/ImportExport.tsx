@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
-import { ArrowLeftRight, X, CheckCircle, Download, Upload, AlertTriangle } from "lucide-solid";
+import { ArrowLeftRight, X, Download, Upload, AlertTriangle } from "lucide-solid";
 import { vaultImport, vaultExport, detectImportFormat } from "../../api";
 import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport } from "../../stores/vault";
 

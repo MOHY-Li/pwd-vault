@@ -25,8 +25,9 @@ import {
 import type { Entry } from "../../api";
 
 export default function MainLayout() {
-  // M2: Toast notification for clipboard errors
+  // Toast notification for clipboard errors
   const [toast, setToast] = createSignal("");
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   function handleKeyDown(e: KeyboardEvent) {
     if (!isUnlocked()) return;
@@ -104,10 +105,11 @@ export default function MainLayout() {
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown);
-    // M2: Wire up clipboard error callback
+    // Wire up clipboard error callback
     onClipboardError((msg) => {
+      if (toastTimer) clearTimeout(toastTimer);
       setToast(msg);
-      setTimeout(() => setToast(""), 3000);
+      toastTimer = setTimeout(() => { setToast(""); toastTimer = null; }, 3000);
     });
   });
 

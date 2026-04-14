@@ -109,11 +109,13 @@ export default function EntryEditor() {
   }
 
   async function handleSave() {
-    const e = form();
+    let e = form();
     if (!e || !e.title.trim()) return;
     setSaving(true);
     setSaveError("");
     try {
+      // Clone to avoid corrupting form state on save failure
+      e = { ...e };
       // Password history: save old password if changed
       if (!editingIsNew()) {
         const original = editingEntry();
@@ -173,19 +175,21 @@ export default function EntryEditor() {
           <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
             {/* Type selector */}
             <div class="flex justify-center gap-2">
-              {ENTRY_TYPES.map((t) => (
-                <button
-                  class={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    entry()?.entry_type === t.key
-                      ? "bg-emerald-600 text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                  }`}
-                  onClick={() => updateField("entry_type", t.key)}
-                >
-                  <t.Icon size={13} />
-                  {t.label}
-                </button>
-              ))}
+              <For each={ENTRY_TYPES}>
+                {(t) => (
+                  <button
+                    class={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                      entry()?.entry_type === t.key
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                    }`}
+                    onClick={() => updateField("entry_type", t.key)}
+                  >
+                    <t.Icon size={13} />
+                    {t.label}
+                  </button>
+                )}
+              </For>
             </div>
 
             {/* Title + Favorite */}
