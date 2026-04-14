@@ -1,11 +1,11 @@
 import { Show, For, Switch, Match, createSignal, createEffect } from "solid-js";
 import {
   KeyRound, FileText, CreditCard, UserRound, X, ChevronDown, ChevronRight, Check, Sparkles,
-  Star, Tag, Wrench, Link, User, Shield, Calendar, PlusCircle,
+  Star, Tag, Wrench, PlusCircle, AlertTriangle,
 } from "lucide-solid";
 import { editingEntry, setEditingEntry, editingIsNew, addEntry, updateEntry, entries } from "../../stores/vault";
 import { generatePassword, evaluateStrength, totpParseUri } from "../../api";
-import type { Entry, StrengthReport } from "../../api";
+import type { Entry, StrengthReport, CustomField } from "../../api";
 
 const ENTRY_TYPES = [
   { key: "login", label: "登录", Icon: KeyRound },
@@ -14,11 +14,34 @@ const ENTRY_TYPES = [
   { key: "identity", label: "身份", Icon: UserRound },
 ];
 
+/** M6: Smart card number formatting supporting Amex and standard cards */
+function formatCardNumber(raw: string): string {
+  const digits = raw.replace(/\D/g, "").slice(0, 19);
+  if (digits.length === 0) return "";
+
+  // Amex: starts with 34 or 37, 15 digits → XXXX XXXXXX XXXXX
+  if ((digits.startsWith("34") || digits.startsWith("37")) && digits.length <= 15) {
+    if (digits.length <= 4) return digits;
+    if (digits.length <= 10) return digits.slice(0, 4) + " " + digits.slice(4);
+    return digits.slice(0, 4) + " " + digits.slice(4, 10) + " " + digits.slice(10);
+  }
+
+  // Standard 16+ digits → XXXX XXXX XXXX XXXX (or longer for 17-19)
+  // Group by 4
+  const groups: string[] = [];
+  for (let i = 0; i < digits.length; i += 4) {
+    groups.push(digits.slice(i, i + 4));
+  }
+  return groups.join(" ");
+}
+
 export default function EntryEditor() {
   const [form, setForm] = createSignal<Entry | null>(null);
   const [strength, setStrength] = createSignal<StrengthReport | null>(null);
   const [saving, setSaving] = createSignal(false);
   const [addingField, setAddingField] = createSignal(false);
+  // M7: Unsaved changes tracking
+  const [showCancelConfirm, setShowCancelConfirm] = createSignal(false);
 
   // Generator options
   const [genLength, setGenLength] = createSignal(20);
@@ -36,6 +59,30 @@ export default function EntryEditor() {
     const e = entry();
     if (!e) return;
     setForm({ ...e, [field]: value });
+  }
+
+  // M7: Check if form has been modified from original entry
+  function isDirty(): boolean {
+    const src = editingEntry();
+    const f = form();
+    if (!src || !f) return false;
+    return JSON.stringify(src) !== JSON.stringify(f);
+  }
+
+  /** M7: Handle cancel/close with unsaved changes warning */
+  function handleCancel() {
+    if (isDirty()) {
+      setShowCancelConfirm(true);
+    } else {
+      setEditingEntry(null);
+      setForm(null);
+    }
+  }
+
+  function confirmCancel() {
+    setShowCancelConfirm(false);
+    setEditingEntry(null);
+    setForm(null);
   }
 
   async function handleGeneratePassword() {
@@ -80,6 +127,7 @@ export default function EntryEditor() {
       }
       setEditingEntry(null);
       setForm(null);
+      setShowCancelConfirm(false);
     } finally {
       setSaving(false);
     }
@@ -89,6 +137,7 @@ export default function EntryEditor() {
     const src = editingEntry();
     if (src) {
       setForm({ ...src });
+      setShowCancelConfirm(false);
       if (src.password) {
         evaluateStrength(src.password)
           .then(r => setStrength(r))
@@ -106,7 +155,7 @@ export default function EntryEditor() {
           {/* Header */}
           <div class="flex items-center justify-between border-b border-zinc-800 px-5 py-3">
             <h3 class="text-sm font-bold text-zinc-200">{editingIsNew() ? "新建条目" : "编辑条目"}</h3>
-            <button onClick={() => { setEditingEntry(null); setForm(null); }} class="text-zinc-500 hover:text-zinc-300">
+            <button onClick={handleCancel} class="text-zinc-500 hover:text-zinc-300">
               <X size={16} />
             </button>
           </div>
@@ -316,13 +365,10 @@ export default function EntryEditor() {
                 <div>
                   <FieldLabel text="卡号" />
                   <input type="text" value={entry()?.password ?? ""} onInput={(e) => {
-                    let raw = e.currentTarget.value.replace(/\D/g, "").slice(0, 19);
-                    if (raw.length > 4) raw = raw.slice(0, 4) + " " + raw.slice(4);
-                    if (raw.length > 9) raw = raw.slice(0, 9) + " " + raw.slice(9);
-                    if (raw.length > 14) raw = raw.slice(0, 14) + " " + raw.slice(14);
-                    if (raw.length > 19) raw = raw.slice(0, 19) + " " + raw.slice(19);
-                    updateField("password", raw);
-                  }} class="input-field !font-mono" placeholder="0000 0000 0000 0000 000" />
+                    // M6: Use smart card number formatting (Amex support)
+                    const formatted = formatCardNumber(e.currentTarget.value);
+                    updateField("password", formatted);
+                  }} class="input-field !font-mono" placeholder="0000 0000 0000 0000" />
                 </div>
               </Match>
 
@@ -342,9 +388,9 @@ export default function EntryEditor() {
                 <div class="grid grid-cols-2 gap-3">
                   <div>
                     <FieldLabel text="邮箱" />
-                    <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: any) => c.name === "邮箱"); return f ? f.value : ""; })()} onInput={(e) => {
+                    <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "邮箱"); return f ? f.value : ""; })()} onInput={(e) => {
                       const fields = [...(entry()?.custom_fields ?? [])];
-                      const idx = fields.findIndex((c: any) => c.name === "邮箱");
+                      const idx = fields.findIndex((c: CustomField) => c.name === "邮箱");
                       if (idx >= 0) fields[idx] = { ...fields[idx], value: e.currentTarget.value };
                       else fields.push({ name: "邮箱", value: e.currentTarget.value, field_type: "text" });
                       updateField("custom_fields", fields);
@@ -352,9 +398,9 @@ export default function EntryEditor() {
                   </div>
                   <div>
                     <FieldLabel text="电话" />
-                    <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: any) => c.name === "电话"); return f ? f.value : ""; })()} onInput={(e) => {
+                    <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "电话"); return f ? f.value : ""; })()} onInput={(e) => {
                       const fields = [...(entry()?.custom_fields ?? [])];
-                      const idx = fields.findIndex((c: any) => c.name === "电话");
+                      const idx = fields.findIndex((c: CustomField) => c.name === "电话");
                       if (idx >= 0) fields[idx] = { ...fields[idx], value: e.currentTarget.value };
                       else fields.push({ name: "电话", value: e.currentTarget.value, field_type: "text" });
                       updateField("custom_fields", fields);
@@ -362,20 +408,20 @@ export default function EntryEditor() {
                   </div>
                 </div>
                 {/* Dynamic custom fields (exclude 邮箱/电话) */}
-                <For each={entry()?.custom_fields?.filter((c: any) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: any) => (
+                <For each={entry()?.custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: CustomField) => (
                     <div class="flex items-end gap-1.5">
                       <div class="flex-1">
                         <FieldLabel text={f.name} />
                         <input type="text" value={f.value} onInput={(e) => {
                           const fields = [...(entry()?.custom_fields ?? [])];
-                          const idx = fields.findIndex((c: any) => c.name === f.name);
+                          const idx = fields.findIndex((c: CustomField) => c.name === f.name);
                           if (idx >= 0) { fields[idx] = { ...fields[idx], value: e.currentTarget.value }; updateField("custom_fields", fields); }
                         }} class="input-field" />
                       </div>
                       <button
                         type="button"
                         onClick={() => {
-                          const fields = (entry()?.custom_fields ?? []).filter((c: any) => c.name !== f.name);
+                          const fields = (entry()?.custom_fields ?? []).filter((c: CustomField) => c.name !== f.name);
                           updateField("custom_fields", fields);
                         }}
                         class="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-colors"
@@ -396,7 +442,7 @@ export default function EntryEditor() {
                             const name = e.currentTarget.value.trim();
                             if (name) {
                               const fields = [...(entry()?.custom_fields ?? [])];
-                              if (!fields.some((c: any) => c.name === name)) {
+                              if (!fields.some((c: CustomField) => c.name === name)) {
                                 fields.push({ name, value: "", field_type: "text" });
                                 updateField("custom_fields", fields);
                               }
@@ -447,8 +493,9 @@ export default function EntryEditor() {
 
           {/* Footer */}
           <div class="flex justify-end gap-2 border-t border-zinc-800 px-5 py-3">
+            {/* M7: Cancel button triggers unsaved changes check */}
             <button
-              onClick={() => { setEditingEntry(null); setForm(null); }}
+              onClick={handleCancel}
               class="rounded-lg bg-zinc-800 px-4 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
             >
               取消
@@ -461,6 +508,35 @@ export default function EntryEditor() {
               {saving() ? "保存中..." : "保存"}
             </button>
           </div>
+
+          {/* M7: Unsaved changes confirmation overlay */}
+          <Show when={showCancelConfirm()}>
+            <div class="absolute inset-0 z-10 flex items-center justify-center bg-black/40 rounded-xl">
+              <div class="mx-6 rounded-lg border border-amber-500/30 bg-zinc-900 p-4 shadow-xl">
+                <div class="flex items-start gap-2">
+                  <AlertTriangle size={16} class="text-amber-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p class="text-sm text-zinc-200 font-medium">未保存的更改</p>
+                    <p class="mt-1 text-xs text-zinc-400">你有未保存的更改，确定要放弃吗？</p>
+                  </div>
+                </div>
+                <div class="mt-3 flex justify-end gap-2">
+                  <button
+                    onClick={() => setShowCancelConfirm(false)}
+                    class="rounded-md bg-zinc-800 px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
+                  >
+                    继续编辑
+                  </button>
+                  <button
+                    onClick={confirmCancel}
+                    class="rounded-md bg-red-600 px-3 py-1.5 text-xs text-white hover:bg-red-500"
+                  >
+                    放弃更改
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Show>
         </div>
       </div>
 

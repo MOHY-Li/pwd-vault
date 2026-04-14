@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, createEffect } from "solid-js";
 import {
   ClipboardList,
   Lock,
@@ -57,10 +57,12 @@ export default function AuditLog() {
     return new Date(ts).toLocaleString("zh-CN");
   }
 
-  // Load on first render
-  if (showAuditLog() && !loaded()) {
-    loadEntries();
-  }
+  // M4: Move loadEntries to createEffect that watches showAuditLog
+  createEffect(() => {
+    if (showAuditLog() && !loaded()) {
+      loadEntries();
+    }
+  });
 
   return (
     <Show when={showAuditLog()}>

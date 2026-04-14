@@ -1,5 +1,5 @@
 import { createSignal, Show, onMount } from "solid-js";
-import { Shield } from "lucide-solid";
+import { Shield, AlertTriangle } from "lucide-solid";
 import { createVault, unlockVault } from "../../stores/vault";
 import { appDataDir } from "@tauri-apps/api/path";
 import { exists } from "@tauri-apps/plugin-fs";
@@ -11,12 +11,16 @@ export default function LockScreen() {
   const [error, setError] = createSignal("");
   const [loading, setLoading] = createSignal(false);
   const [defaultPath, setDefaultPath] = createSignal("");
+  // M5: Track whether a vault file already exists
+  const [vaultFileExists, setVaultFileExists] = createSignal(false);
+  const [showCreateWarning, setShowCreateWarning] = createSignal(false);
 
   onMount(async () => {
     const dir = await appDataDir();
     const vaultPath = dir + "my.vault";
     setDefaultPath(vaultPath);
     const fileExists = await exists(vaultPath);
+    setVaultFileExists(fileExists);
     setIsSetup(!fileExists);
   });
 
@@ -55,6 +59,21 @@ export default function LockScreen() {
     }
   }
 
+  /** M5: Handle clicking the "Create" tab when a vault already exists */
+  function handleCreateTabClick() {
+    if (vaultFileExists()) {
+      // Toggle warning — clicking again confirms they want to create
+      if (showCreateWarning()) {
+        setShowCreateWarning(false);
+        setIsSetup(true);
+      } else {
+        setShowCreateWarning(true);
+      }
+    } else {
+      setIsSetup(true);
+    }
+  }
+
   return (
     <div class="flex flex-1 items-center justify-center">
       <div class="w-full max-w-md p-8">
@@ -73,9 +92,11 @@ export default function LockScreen() {
             class={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
               isSetup()
                 ? "bg-emerald-600 text-white"
-                : "text-zinc-400 hover:text-zinc-200"
+                : vaultFileExists()
+                  ? "text-zinc-500 hover:text-zinc-300"
+                  : "text-zinc-400 hover:text-zinc-200"
             }`}
-            onClick={() => setIsSetup(true)}
+            onClick={handleCreateTabClick}
           >
             创建新库
           </button>
@@ -85,11 +106,22 @@ export default function LockScreen() {
                 ? "bg-emerald-600 text-white"
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
-            onClick={() => setIsSetup(false)}
+            onClick={() => { setIsSetup(false); setShowCreateWarning(false); }}
           >
             解锁已有库
           </button>
         </div>
+
+        {/* M5: Warning when vault exists and user tries to create */}
+        <Show when={showCreateWarning() && isSetup()}>
+          <div class="mb-4 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+            <AlertTriangle size={16} class="text-amber-400 mt-0.5 flex-shrink-0" />
+            <div class="text-xs text-amber-300">
+              检测到已有密码库文件。创建新库将<strong>覆盖</strong>现有数据。
+              再次点击「创建新库」标签确认，或点击「解锁已有库」解锁现有密码库。
+            </div>
+          </div>
+        </Show>
 
         {/* Form */}
         <form onSubmit={handleSubmit} class="space-y-4">

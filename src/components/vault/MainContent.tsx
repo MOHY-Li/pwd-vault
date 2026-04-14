@@ -3,6 +3,7 @@ import {
   Trash2, Check, Copy, Pencil, Eye, EyeOff, Shield, KeyRound, FileText, CreditCard, UserRound, Star, Calendar, Tag, PlusCircle, AlertTriangle,
 } from "lucide-solid";
 import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, totpCodes, refreshTotp, copyToClipboard } from "../../stores/vault";
+import type { CustomField } from "../../api";
 
 export default function MainContent() {
   const [showPassword, setShowPassword] = createSignal(false);
@@ -10,6 +11,15 @@ export default function MainContent() {
   const [pendingDelete, setPendingDelete] = createSignal(false);
 
   const selectedEntry = () => entries.find((e) => e.id === selectedEntryId());
+
+  // M8: Reset showPassword when switching entries
+  createEffect(() => {
+    const id = selectedEntryId();
+    if (id) {
+      setShowPassword(false);
+      setPendingDelete(false);
+    }
+  });
 
   async function handleCopy(text: string, field: string) {
     const ok = await copyToClipboard(text);
@@ -137,7 +147,7 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="附加字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                        <For each={entry().custom_fields}>{(f: CustomField, i: () => number) => (
                           <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
                         )}</For>
                       </div>
@@ -171,7 +181,7 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="附加字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                        <For each={entry().custom_fields}>{(f: CustomField, i: () => number) => (
                           <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
                         )}</For>
                       </div>
@@ -190,16 +200,16 @@ export default function MainContent() {
                     <div class="grid grid-cols-2 gap-3">
                       <FieldCard
                         label="邮箱"
-                        value={(() => { const f = entry().custom_fields?.find((c: any) => c.name === "邮箱"); return f ? f.value : ""; })()}
+                        value={(() => { const f = entry().custom_fields?.find((c: CustomField) => c.name === "邮箱"); return f ? f.value : ""; })()}
                         placeholder="未设置"
-                        onCopy={() => { const f = entry().custom_fields?.find((c: any) => c.name === "邮箱"); if (f) handleCopy(f.value, "email"); }}
+                        onCopy={() => { const f = entry().custom_fields?.find((c: CustomField) => c.name === "邮箱"); if (f) handleCopy(f.value, "email"); }}
                         copied={copied() === "email"}
                       />
                       <FieldCard
                         label="电话"
-                        value={(() => { const f = entry().custom_fields?.find((c: any) => c.name === "电话"); return f ? f.value : ""; })()}
+                        value={(() => { const f = entry().custom_fields?.find((c: CustomField) => c.name === "电话"); return f ? f.value : ""; })()}
                         placeholder="未设置"
-                        onCopy={() => { const f = entry().custom_fields?.find((c: any) => c.name === "电话"); if (f) handleCopy(f.value, "phone"); }}
+                        onCopy={() => { const f = entry().custom_fields?.find((c: CustomField) => c.name === "电话"); if (f) handleCopy(f.value, "phone"); }}
                         copied={copied() === "phone"}
                       />
                     </div>
@@ -212,7 +222,7 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="自定义字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                        <For each={entry().custom_fields}>{(f: CustomField, i: () => number) => (
                           <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
                         )}</For>
                       </div>

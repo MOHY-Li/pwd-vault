@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js";
+import { For, Show, createSignal, onCleanup } from "solid-js";
 import {
   Inbox,
   Star,
@@ -13,6 +13,7 @@ import {
   History,
   ArrowLeftRight,
   Wrench,
+  Loader2,
 } from "lucide-solid";
 import {
   entries,
@@ -29,6 +30,7 @@ import {
   setShowAuditLog,
   setShowImportExport,
   lockVault,
+  isUnlocked,
 } from "../../stores/vault";
 import type { Entry } from "../../api";
 
@@ -47,6 +49,23 @@ function getEntryIcon(entryType: string) {
 }
 
 export default function Sidebar() {
+  // L4: Debounced search input (200ms)
+  const [inputValue, setInputValue] = createSignal(searchQuery());
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function handleSearchInput(value: string) {
+    setInputValue(value);
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      setSearchQuery(value);
+    }, 200);
+  }
+
+  // Clean up debounce timer on unmount
+  onCleanup(() => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+  });
+
   const filteredEntries = () => {
     const q = searchQuery().toLowerCase();
     const filter = sidebarFilter();
@@ -84,6 +103,11 @@ export default function Sidebar() {
     setEditingEntry(empty);
   }
 
+  // M3: Distinguish loading, empty-vault, and no-search-results states
+  const isLoading = () => !isUnlocked();
+  const hasNoEntries = () => entries.length === 0;
+  const hasNoResults = () => filteredEntries().length === 0 && searchQuery().length > 0;
+
   return (
     <div class="flex h-full w-64 flex-col border-r border-zinc-800 bg-zinc-900">
       {/* Search — compact */}
@@ -92,8 +116,8 @@ export default function Sidebar() {
           <Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
             type="text"
-            value={searchQuery()}
-            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+            value={inputValue()}
+            onInput={(e) => handleSearchInput(e.currentTarget.value)}
             placeholder="搜索..."
             class="w-full rounded-md border border-zinc-700 bg-zinc-800 py-1.5 pl-8 pr-3 text-xs text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
           />
@@ -121,26 +145,50 @@ export default function Sidebar() {
 
       {/* Entry list — compact single-line items */}
       <div class="flex-1 overflow-y-auto px-1.5 py-1">
-        <For each={filteredEntries()}>
-          {(entry) => (
-            <button
-              class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
-                selectedEntryId() === entry.id
-                  ? "bg-zinc-800 text-zinc-100"
-                  : "text-zinc-300 hover:bg-zinc-800/50"
-              }`}
-              onClick={() => setSelectedEntryId(entry.id)}
-            >
-              <span class="text-emerald-500 flex-shrink-0">{(() => { const Ic = getEntryIcon(entry.entry_type); return <Ic size={14} />; })()}</span>
-              <span class="truncate text-xs font-medium">{entry.title || "无标题"}</span>
-              <Show when={entry.favorite}>
-                <Star size={11} class="text-yellow-400 fill-yellow-400 flex-shrink-0" />
-              </Show>
-            </button>
-          )}
-        </For>
-        <Show when={filteredEntries().length === 0}>
-          <div class="py-6 text-center text-xs text-zinc-600">暂无条目</div>
+        {/* M3: Loading state */}
+        <Show when={isLoading()}>
+          <div class="flex flex-col items-center justify-center py-12 text-zinc-600">
+            <Loader2 size={24} class="animate-spin" />
+            <span class="mt-2 text-xs">加载中...</span>
+          </div>
+        </Show>
+
+        {/* M3: Empty vault state */}
+        <Show when={!isLoading() && hasNoEntries()}>
+          <div class="py-12 text-center text-xs text-zinc-600">
+            <Inbox size={24} class="mx-auto mb-2 text-zinc-700" />
+            暂无条目，点击上方 + 新建
+          </div>
+        </Show>
+
+        {/* M3: No search results state */}
+        <Show when={!isLoading() && !hasNoEntries() && hasNoResults()}>
+          <div class="py-8 text-center text-xs text-zinc-600">
+            <Search size={20} class="mx-auto mb-2 text-zinc-700" />
+            未找到匹配「{searchQuery()}」的条目
+          </div>
+        </Show>
+
+        {/* Normal entry list */}
+        <Show when={!isLoading() && !hasNoEntries() && !hasNoResults()}>
+          <For each={filteredEntries()}>
+            {(entry) => (
+              <button
+                class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
+                  selectedEntryId() === entry.id
+                    ? "bg-zinc-800 text-zinc-100"
+                    : "text-zinc-300 hover:bg-zinc-800/50"
+                }`}
+                onClick={() => setSelectedEntryId(entry.id)}
+              >
+                <span class="text-emerald-500 flex-shrink-0">{(() => { const Ic = getEntryIcon(entry.entry_type); return <Ic size={14} />; })()}</span>
+                <span class="truncate text-xs font-medium">{entry.title || "无标题"}</span>
+                <Show when={entry.favorite}>
+                  <Star size={11} class="text-yellow-400 fill-yellow-400 flex-shrink-0" />
+                </Show>
+              </button>
+            )}
+          </For>
         </Show>
       </div>
 
