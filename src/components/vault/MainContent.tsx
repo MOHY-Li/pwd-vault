@@ -1,4 +1,4 @@
-import { Show, createSignal, createEffect, onCleanup, Switch, Match } from "solid-js";
+import { Show, For, createSignal, createEffect, onCleanup, Switch, Match } from "solid-js";
 import {
   Trash2, Check, Copy, Pencil, Eye, EyeOff, Shield, KeyRound, FileText, CreditCard, UserRound, Star, Calendar, Tag, PlusCircle, AlertTriangle,
 } from "lucide-solid";
@@ -7,13 +7,16 @@ import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry
 export default function MainContent() {
   const [showPassword, setShowPassword] = createSignal(false);
   const [copied, setCopied] = createSignal("");
+  const [pendingDelete, setPendingDelete] = createSignal(false);
 
   const selectedEntry = () => entries.find((e) => e.id === selectedEntryId());
 
-  function handleCopy(text: string, field: string) {
-    copyToClipboard(text);
-    setCopied(field);
-    setTimeout(() => setCopied(""), 2000);
+  async function handleCopy(text: string, field: string) {
+    const ok = await copyToClipboard(text);
+    if (ok) {
+      setCopied(field);
+      setTimeout(() => setCopied(""), 2000);
+    }
   }
 
   return (
@@ -52,20 +55,40 @@ export default function MainContent() {
                     <Pencil size={12} /> 编辑
                   </button>
                   <button
-                    onClick={async () => { if (confirm("确定删除此条目？")) await deleteEntry(entry().id); }}
+                    onClick={() => setPendingDelete(true)}
                     class="flex items-center gap-1 rounded-md bg-red-500/10 px-2.5 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/20"
                   >
                     <Trash2 size={12} /> 删除
                   </button>
                 </div>
               </div>
+              {/* Inline delete confirmation */}
+              <Show when={pendingDelete()}>
+                <div class="mt-3 flex items-center justify-between rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
+                  <span class="text-xs text-red-400"><AlertTriangle size={13} class="inline mr-1" /> 确定删除？</span>
+                  <div class="flex gap-2">
+                    <button
+                      onClick={async () => { await deleteEntry(entry().id); setPendingDelete(false); }}
+                      class="rounded-md bg-red-600 px-2.5 py-1 text-xs text-white hover:bg-red-500"
+                    >
+                      删除
+                    </button>
+                    <button
+                      onClick={() => setPendingDelete(false)}
+                      class="rounded-md bg-zinc-800 px-2.5 py-1 text-xs text-zinc-400 hover:bg-zinc-700"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              </Show>
               {/* Tags */}
               <Show when={entry().tags?.length > 0}>
                 <div class="mt-3 flex items-center gap-1.5">
                   <Tag size={11} class="text-zinc-600" />
-                  {entry().tags.map((tag: string) => (
+                  <For each={entry().tags}>{(tag: string) => (
                     <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-500">{tag}</span>
-                  ))}
+                  )}</For>
                 </div>
               </Show>
             </div>
@@ -114,9 +137,9 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="附加字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        {entry().custom_fields.map((f: any, i: number) => (
-                          <FieldCard label={f.name || `字段 ${i + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i}`)} copied={copied() === `custom_${i}`} />
-                        ))}
+                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                          <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
+                        )}</For>
                       </div>
                     </Show>
                   </div>
@@ -148,9 +171,9 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="附加字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        {entry().custom_fields.map((f: any, i: number) => (
-                          <FieldCard label={f.name || `字段 ${i + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i}`)} copied={copied() === `custom_${i}`} />
-                        ))}
+                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                          <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
+                        )}</For>
                       </div>
                     </Show>
                   </div>
@@ -189,9 +212,9 @@ export default function MainContent() {
                     <Show when={entry().custom_fields?.length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="自定义字段" />
                       <div class="grid grid-cols-2 gap-3">
-                        {entry().custom_fields.map((f: any, i: number) => (
-                          <FieldCard label={f.name || `字段 ${i + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i}`)} copied={copied() === `custom_${i}`} />
-                        ))}
+                        <For each={entry().custom_fields}>{(f: any, i: () => number) => (
+                          <FieldCard label={f.name || `字段 ${i() + 1}`} value={f.value} placeholder="--" onCopy={() => handleCopy(f.value, `custom_${i()}`)} copied={copied() === `custom_${i()}`} />
+                        )}</For>
                       </div>
                     </Show>
                     <Show when={!entry().custom_fields?.length}>

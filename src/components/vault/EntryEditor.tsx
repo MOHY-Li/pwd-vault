@@ -1,4 +1,4 @@
-import { Show, Switch, Match, createSignal, createEffect } from "solid-js";
+import { Show, For, Switch, Match, createSignal, createEffect } from "solid-js";
 import {
   KeyRound, FileText, CreditCard, UserRound, X, ChevronDown, ChevronRight, Check, Sparkles,
   Star, Tag, Wrench, Link, User, Shield, Calendar, PlusCircle,
@@ -62,6 +62,16 @@ export default function EntryEditor() {
     if (!e || !e.title.trim()) return;
     setSaving(true);
     try {
+      // Password history: save old password if changed
+      if (!editingIsNew()) {
+        const original = editingEntry();
+        if (original && original.password && original.password !== e.password) {
+          e.password_history = [
+            ...(original.password_history ?? []),
+            { password: original.password, changed_at: original.modified || original.created }
+          ];
+        }
+      }
       e.modified = new Date().toISOString();
       if (editingIsNew()) {
         await addEntry(e);
@@ -160,7 +170,7 @@ export default function EntryEditor() {
                 {(() => {
                   const allTags = [...new Set(entries.flatMap((e: Entry) => e.tags))].sort();
                   const currentTags = entry()?.tags ?? [];
-                  return allTags.map(tag => (
+                  return <For each={allTags}>{(tag: string) => (
                     <button
                       type="button"
                       onClick={() => {
@@ -178,7 +188,7 @@ export default function EntryEditor() {
                     >
                       {tag}
                     </button>
-                  ));
+                  )}</For>;
                 })()}
               </div>
             </div>
@@ -255,7 +265,7 @@ export default function EntryEditor() {
                   <FieldLabel text="TOTP URI" />
                   <input
                     type="text"
-                    value={entry()?.totp?.secret ? "otpauth://totp/..." : ""}
+                    value={""}
                     onInput={async (e) => {
                       const uri = e.currentTarget.value.trim();
                       if (uri.startsWith("otpauth://")) {
@@ -266,7 +276,10 @@ export default function EntryEditor() {
                     placeholder="otpauth://totp/..."
                   />
                   <Show when={entry()?.totp}>
-                    <span class="mt-0.5 flex items-center gap-1 text-[10px] text-emerald-400"><Check size={10} /> 已配置</span>
+                    <div class="flex items-center justify-between mt-1">
+                      <span class="flex items-center gap-1 text-[10px] text-emerald-400"><Check size={10} /> TOTP 已配置</span>
+                      <button type="button" onClick={() => updateField("totp", null)} class="text-[10px] text-zinc-600 hover:text-red-400">清除</button>
+                    </div>
                   </Show>
                 </div>
               </Match>
@@ -349,9 +362,7 @@ export default function EntryEditor() {
                   </div>
                 </div>
                 {/* Dynamic custom fields (exclude 邮箱/电话) */}
-                {(() => {
-                  const extraFields = entry()?.custom_fields?.filter((c: any) => c.name !== "邮箱" && c.name !== "电话") ?? [];
-                  return extraFields.map((f: any, i: number) => (
+                <For each={entry()?.custom_fields?.filter((c: any) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: any) => (
                     <div class="flex items-end gap-1.5">
                       <div class="flex-1">
                         <FieldLabel text={f.name} />
@@ -372,8 +383,7 @@ export default function EntryEditor() {
                         <X size={13} />
                       </button>
                     </div>
-                  ));
-                })()}
+                )}</For>
                 <Show when={addingField()}>
                   <div class="flex items-end gap-1.5">
                     <div class="flex-1">

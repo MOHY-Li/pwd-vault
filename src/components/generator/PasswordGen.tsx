@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, onMount } from "solid-js";
 import { Wrench, X, Check, Copy, RefreshCw } from "lucide-solid";
 import { generatePassword, evaluateStrength } from "../../api";
 import type { StrengthReport } from "../../api";
@@ -40,14 +40,16 @@ export default function PasswordGen() {
     }
   }
 
-  function handleCopy() {
-    copyToClipboard(result());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  async function handleCopy() {
+    const ok = await copyToClipboard(result());
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   // Generate on mount
-  handleGenerate();
+  onMount(() => { handleGenerate(); });
 
   return (
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">

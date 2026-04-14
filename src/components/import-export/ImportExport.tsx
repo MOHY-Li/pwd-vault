@@ -1,7 +1,7 @@
 import { For, Show, createSignal } from "solid-js";
 import { ArrowLeftRight, X, CheckCircle, Download, Upload, AlertTriangle } from "lucide-solid";
 import { vaultImport, vaultExport, detectImportFormat } from "../../api";
-import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport, copyToClipboard } from "../../stores/vault";
+import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport } from "../../stores/vault";
 
 const IMPORT_FORMATS = [
   { key: "json", label: "JSON", desc: "通用 JSON 格式" },
@@ -52,9 +52,16 @@ export default function ImportExport() {
     setStatus("导出中...");
     try {
       const result = await vaultExport(exportFormat());
-      // Copy to clipboard
-      await copyToClipboard(result);
-      setStatus(`已导出到剪贴板（${exportFormat().toUpperCase()} 格式）`);
+      const ext = exportFormat() === "csv" ? "csv" : "json";
+      const mime = exportFormat() === "csv" ? "text/csv" : "application/json";
+      const blob = new Blob([result], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pwd-vault-export-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus(`已导出为 ${ext.toUpperCase()} 文件`);
     } catch (err) {
       setStatus(`导出失败: ${err}`);
     } finally {
@@ -215,7 +222,7 @@ export default function ImportExport() {
                 disabled={busy()}
                 class="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                {busy() ? "导出中..." : "导出到剪贴板"}
+                {busy() ? "导出中..." : "导出文件"}
               </button>
             </Show>
           </div>

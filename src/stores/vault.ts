@@ -9,21 +9,18 @@ import * as api from "../api";
 // ---------------------------------------------------------------------------
 
 const [isUnlocked, setIsUnlocked] = createSignal(false);
-const [masterPassword, setMasterPassword] = createSignal("");
 const [vaultPath, setVaultPath] = createSignal("");
 
-export { isUnlocked, masterPassword, vaultPath };
+export { isUnlocked, vaultPath };
 
 export async function createVault(password: string, path: string) {
   await api.vaultCreate(password, path);
-  setMasterPassword(password);
   setVaultPath(path);
   setIsUnlocked(true);
 }
 
 export async function unlockVault(password: string, path: string) {
   await api.vaultOpen(password, path);
-  setMasterPassword(password);
   setVaultPath(path);
   setIsUnlocked(true);
   await refreshEntries();
@@ -31,7 +28,6 @@ export async function unlockVault(password: string, path: string) {
 
 export async function lockVault() {
   await api.vaultLock();
-  setMasterPassword("");
   setIsUnlocked(false);
   setEntries([]);
   setTrash([]);
@@ -54,14 +50,30 @@ export async function lockVault() {
 // ---------------------------------------------------------------------------
 
 let clipboardTimer: ReturnType<typeof setTimeout> | null = null;
+let clipboardErrorCb: ((msg: string) => void) | null = null;
 
-export async function copyToClipboard(text: string) {
-  await navigator.clipboard.writeText(text);
-  if (clipboardTimer) clearTimeout(clipboardTimer);
-  clipboardTimer = setTimeout(() => {
-    navigator.clipboard.writeText("").catch(() => {});
-    clipboardTimer = null;
-  }, 30_000);
+/** Set a global callback for clipboard error notifications */
+export function onClipboardError(cb: (msg: string) => void) {
+  clipboardErrorCb = cb;
+}
+
+export async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    if (clipboardTimer) clearTimeout(clipboardTimer);
+    clipboardTimer = setTimeout(async () => {
+      try {
+        await navigator.clipboard.writeText("");
+      } catch {
+        clipboardErrorCb?.("剪贴板自动清除失败，请手动清除");
+      }
+      clipboardTimer = null;
+    }, 30_000);
+    return true;
+  } catch (err) {
+    clipboardErrorCb?.("复制失败，请确保页面处于焦点状态");
+    return false;
+  }
 }
 
 export async function saveVault() {
