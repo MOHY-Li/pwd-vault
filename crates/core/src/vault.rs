@@ -14,8 +14,9 @@ use std::io::{Cursor, Read, Write};
 
 use base64::Engine;
 use crate::crypto::{
-    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key, derive_master_key,
-    derive_vault_key, encrypt, generate_salt, verify_and_derive_key, verify_mac, EncryptedData,
+    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key,
+    derive_master_key, derive_vault_key, encrypt, generate_salt, verify_and_derive_key,
+    verify_mac, EncryptedData, MasterKey,
 };
 use crate::entry::Entry;
 use crate::error::{Result, VaultError};
@@ -50,8 +51,9 @@ const HEADER_SIZE: usize = 77;
 
 /// An opened vault that holds the decrypted index and decrypted entries in
 /// memory.  Created via [`VaultFile::create`] or [`VaultFile::open`].
-#[derive(Debug)]
 pub struct VaultFile {
+    /// Cached master key — avoids re-running Argon2 on every save.
+    master_key: MasterKey,
     /// Argon2id parameters used for key derivation.
     pub argon2_memory_mib: u32,
     pub argon2_iterations: u16,
@@ -64,6 +66,20 @@ pub struct VaultFile {
     entries: Vec<Entry>,
     /// Soft-deleted entries kept for recycle bin.
     deleted_entries: Vec<Entry>,
+}
+
+impl std::fmt::Debug for VaultFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("VaultFile")
+            .field("argon2_memory_mib", &self.argon2_memory_mib)
+            .field("argon2_iterations", &self.argon2_iterations)
+            .field("argon2_parallelism", &self.argon2_parallelism)
+            .field("salt", &"[..]")
+            .field("index", &self.index)
+            .field("entries", &self.entries.len())
+            .field("deleted_entries", &self.deleted_entries.len())
+            .finish_non_exhaustive()
+    }
 }
 
 impl VaultFile {
@@ -82,10 +98,9 @@ impl VaultFile {
             DEFAULT_ARGON2_ITERATIONS,
             u32::from(DEFAULT_ARGON2_PARALLELISM),
         )?;
-        let _auth_hash = derive_auth_hash(&master_key);
-        let _vault_key = derive_vault_key(&master_key);
 
         Ok(Self {
+            master_key,
             argon2_memory_mib: DEFAULT_ARGON2_MEMORY_MIB,
             argon2_iterations: DEFAULT_ARGON2_ITERATIONS,
             argon2_parallelism: DEFAULT_ARGON2_PARALLELISM,
@@ -238,6 +253,7 @@ impl VaultFile {
         };
 
         Ok(Self {
+            master_key,
             argon2_memory_mib,
             argon2_iterations,
             argon2_parallelism,
@@ -253,16 +269,10 @@ impl VaultFile {
     // -----------------------------------------------------------------------
 
     /// Save the vault to disk, re-encrypting everything.
-    pub fn save(&mut self, master_password: &str, path: &std::path::Path) -> Result<()> {
-        let master_key = derive_master_key(
-            master_password,
-            &self.salt,
-            self.argon2_memory_mib,
-            self.argon2_iterations,
-            u32::from(self.argon2_parallelism),
-        )?;
-        let vault_key = derive_vault_key(&master_key);
-        let entry_key_seed = derive_entry_key_seed(master_key.as_bytes());
+    /// Uses the cached master key — no Argon2 re-derivation needed.
+    pub fn save(&mut self, path: &std::path::Path) -> Result<()> {
+        let vault_key = derive_vault_key(&self.master_key);
+        let entry_key_seed = derive_entry_key_seed(self.master_key.as_bytes());
 
         // === Phase 1: encrypt all entries and compute offsets ===
         // Work on a cloned index to avoid corrupting self.index on save failure.
@@ -345,7 +355,7 @@ impl VaultFile {
         buf.push(self.argon2_parallelism);
         buf.extend_from_slice(&self.salt);
 
-        let auth_hash = derive_auth_hash(&master_key);
+        let auth_hash = derive_auth_hash(&self.master_key);
         buf.extend_from_slice(&auth_hash);
 
         // --- encrypted index ---
@@ -360,7 +370,7 @@ impl VaultFile {
         }
 
         // --- file MAC ---
-        let mac_key = derive_mac_key(&master_key);
+        let mac_key = derive_mac_key(&self.master_key);
         let mac = compute_mac(&buf, &mac_key);
         buf.extend_from_slice(&mac);
 
@@ -393,6 +403,7 @@ impl VaultFile {
             crate::entry::EntryType::Note => "note",
             crate::entry::EntryType::Card => "card",
             crate::entry::EntryType::Identity => "identity",
+            crate::entry::EntryType::Custom(ref s) => s.as_str(),
         };
 
         // Encrypt the title with the vault key so it's searchable after index decrypt
@@ -438,6 +449,7 @@ impl VaultFile {
             crate::entry::EntryType::Note => "note",
             crate::entry::EntryType::Card => "card",
             crate::entry::EntryType::Identity => "identity",
+            crate::entry::EntryType::Custom(ref s) => s.as_str(),
         };
 
         let title_enc =
@@ -610,7 +622,7 @@ mod tests {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path().to_path_buf();
 
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
         assert!(path.exists());
         assert!(path.metadata().unwrap().len() > 0);
     }
@@ -621,7 +633,7 @@ mod tests {
         let path = tmp.path().to_path_buf();
 
         let mut vault = VaultFile::create(TEST_PASSWORD).unwrap();
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         let opened = VaultFile::open(TEST_PASSWORD, &path).unwrap();
         assert!(opened.is_empty());
@@ -634,7 +646,7 @@ mod tests {
         let path = tmp.path().to_path_buf();
 
         let mut vault = VaultFile::create(TEST_PASSWORD).unwrap();
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         let result = VaultFile::open("wrong-password", &path);
         assert!(result.is_err());
@@ -662,7 +674,7 @@ mod tests {
         vault.add_entry(e2.clone());
         assert_eq!(vault.len(), 2);
 
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         // Re-open and verify
         let opened = VaultFile::open(TEST_PASSWORD, &path).unwrap();
@@ -696,7 +708,7 @@ mod tests {
         e.password = "new-pass".into();
         vault.update_entry(e).unwrap();
 
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         let opened = VaultFile::open(TEST_PASSWORD, &path).unwrap();
         let entry = opened.get_entry(&id).unwrap();
@@ -721,7 +733,7 @@ mod tests {
         assert!(vault.delete_entry(&id1));
         assert!(!vault.delete_entry("nonexistent"));
 
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         let opened = VaultFile::open(TEST_PASSWORD, &path).unwrap();
         assert_eq!(opened.len(), 1);
@@ -761,7 +773,7 @@ mod tests {
         let mut vault = VaultFile::create(TEST_PASSWORD).unwrap();
         let e = Entry::new("Secret".into(), EntryType::Login);
         vault.add_entry(e);
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         // Tamper with a byte in the middle of the file
         let mut data = std::fs::read(&path).unwrap();
@@ -790,7 +802,7 @@ mod tests {
             vault.add_entry(e);
         }
 
-        vault.save(TEST_PASSWORD, &path).unwrap();
+        vault.save(&path).unwrap();
 
         let opened = VaultFile::open(TEST_PASSWORD, &path).unwrap();
         assert_eq!(opened.len(), 50);

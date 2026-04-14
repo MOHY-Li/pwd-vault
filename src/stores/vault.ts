@@ -65,7 +65,7 @@ export async function copyToClipboard(text: string) {
 }
 
 export async function saveVault() {
-  await api.vaultSave(masterPassword());
+  await api.vaultSave();
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +154,7 @@ export async function refreshTotp(entryId: string) {
 
 export const [selectedEntryId, setSelectedEntryId] = createSignal<string | null>(null);
 export const [searchQuery, setSearchQuery] = createSignal("");
-export const [sidebarFilter, setSidebarFilter] = createSignal<"all" | "favorites" | "login" | "note" | "card" | "identity" | "trash">("all");
+export const [sidebarFilter, setSidebarFilter] = createSignal<string>("all");
 export const [editingEntry, setEditingEntry] = createSignal<Entry | null>(null);
 export const [editingIsNew, setEditingIsNew] = createSignal(false);
 export const [showGenerator, setShowGenerator] = createSignal(false);

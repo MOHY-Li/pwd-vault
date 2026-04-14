@@ -49,7 +49,7 @@ pub fn vault_create(
 ) -> Result<(), String> {
     let mut vault = VaultFile::create(&master_password).map_err(|e| e.to_string())?;
     let file_path = PathBuf::from(&path);
-    vault.save(&master_password, &file_path).map_err(|e| e.to_string())?;
+    vault.save(&file_path).map_err(|e| e.to_string())?;
 
     *vault_state.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(vault);
     *vault_path.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(file_path);
@@ -78,7 +78,6 @@ pub fn vault_open(
 
 #[tauri::command]
 pub fn vault_save(
-    master_password: String,
     vault_state: State<'_, VaultState>,
     vault_path: State<'_, VaultPath>,
 ) -> Result<(), String> {
@@ -95,7 +94,7 @@ pub fn vault_save(
             .ok_or_else(|| "no vault path stored; open or create a vault first".to_string())?
     };
 
-    vault.save(&master_password, &file_path).map_err(|e| e.to_string())
+    vault.save(&file_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -1,4 +1,19 @@
 import { For, Show, createSignal } from "solid-js";
+import {
+  ClipboardList,
+  Lock,
+  Unlock,
+  KeyRound,
+  Upload,
+  Eye,
+  Plus,
+  Pencil,
+  Trash2,
+  Copy,
+  Download,
+  RefreshCw,
+  X,
+} from "lucide-solid";
 import { auditRecent } from "../../api";
 import type { AuditEntry } from "../../api";
 import { showAuditLog, setShowAuditLog } from "../../stores/vault";
@@ -13,23 +28,29 @@ export default function AuditLog() {
     setLoaded(true);
   }
 
-  function formatEvent(entry: AuditEntry): string {
+  function formatEvent(entry: AuditEntry): any {
     const e = entry.event_type;
-    if (e === "VaultCreated") return "🔐 创建密码库";
-    if (e === "VaultOpened") return "🔓 打开密码库";
-    if (e === "VaultLocked") return "🔒 锁定密码库";
-    if (e === "VaultUnlocked") return "🔓 解锁密码库";
-    if (e === "MasterPasswordChanged") return "🔑 修改主密码";
-    if (e === "DataExported") return "📤 导出数据";
+    const icon = (I: any, label: string, extra?: string) => (
+      <span class="inline-flex items-center gap-1.5">
+        <I size={14} class="inline shrink-0" />
+        {label}{extra ?? ""}
+      </span>
+    );
+    if (e === "VaultCreated") return icon(Lock, "创建密码库");
+    if (e === "VaultOpened") return icon(Unlock, "打开密码库");
+    if (e === "VaultLocked") return icon(Lock, "锁定密码库");
+    if (e === "VaultUnlocked") return icon(Unlock, "解锁密码库");
+    if (e === "MasterPasswordChanged") return icon(KeyRound, "修改主密码");
+    if (e === "DataExported") return icon(Upload, "导出数据");
     if (typeof e === "object") {
-      if ("EntryViewed" in e) return `👁️ 查看条目 ${e.EntryViewed.entry_id.slice(0, 8)}...`;
-      if ("EntryCreated" in e) return `➕ 创建条目 ${e.EntryCreated.entry_id.slice(0, 8)}...`;
-      if ("EntryUpdated" in e) return `✏️ 更新条目 ${e.EntryUpdated.entry_id.slice(0, 8)}...`;
-      if ("EntryDeleted" in e) return `🗑️ 删除条目 ${e.EntryDeleted.entry_id.slice(0, 8)}...`;
-      if ("PasswordCopied" in e) return `📋 复制密码 ${e.PasswordCopied.entry_id.slice(0, 8)}...`;
-      if ("DataImported" in e) return `📥 导入数据 (${e.DataImported.count} 条)`;
+      if ("EntryViewed" in e) return icon(Eye, "查看条目 ", `${e.EntryViewed.entry_id.slice(0, 8)}...`);
+      if ("EntryCreated" in e) return icon(Plus, "创建条目 ", `${e.EntryCreated.entry_id.slice(0, 8)}...`);
+      if ("EntryUpdated" in e) return icon(Pencil, "更新条目 ", `${e.EntryUpdated.entry_id.slice(0, 8)}...`);
+      if ("EntryDeleted" in e) return icon(Trash2, "删除条目 ", `${e.EntryDeleted.entry_id.slice(0, 8)}...`);
+      if ("PasswordCopied" in e) return icon(Copy, "复制密码 ", `${e.PasswordCopied.entry_id.slice(0, 8)}...`);
+      if ("DataImported" in e) return icon(Download, "导入数据 ", `(${e.DataImported.count} 条)`);
     }
-    return "未知操作";
+    return <>未知操作</>;
   }
 
   function formatTime(ts: string): string {
@@ -48,7 +69,8 @@ export default function AuditLog() {
           {/* Header */}
           <div class="flex items-center justify-between border-b border-zinc-800 p-4">
             <div class="flex items-center gap-2">
-              <h3 class="text-lg font-bold">📋 审计日志</h3>
+              <ClipboardList size={18} class="inline" />
+              <h3 class="text-lg font-bold">审计日志</h3>
               <span class="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">
                 {entries().length} 条记录
               </span>
@@ -57,7 +79,7 @@ export default function AuditLog() {
               onClick={() => setShowAuditLog(false)}
               class="text-zinc-500 hover:text-zinc-300"
             >
-              ✕
+              <X size={18} />
             </button>
           </div>
 
@@ -65,7 +87,9 @@ export default function AuditLog() {
           <div class="flex-1 overflow-y-auto p-4">
             <Show when={entries().length === 0 && loaded()}>
               <div class="py-12 text-center text-zinc-600">
-                <div class="text-4xl">📋</div>
+                <div class="flex justify-center text-zinc-600">
+                  <ClipboardList size={36} />
+                </div>
                 <p class="mt-2">暂无审计记录</p>
               </div>
             </Show>
@@ -88,9 +112,10 @@ export default function AuditLog() {
           <div class="border-t border-zinc-800 p-3">
             <button
               onClick={loadEntries}
-              class="w-full rounded-lg bg-zinc-800 py-2 text-sm text-zinc-400 hover:text-zinc-200"
+              class="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-800 py-2 text-sm text-zinc-400 hover:text-zinc-200"
             >
-              🔄 刷新
+              <RefreshCw size={14} />
+              刷新
             </button>
           </div>
         </div>

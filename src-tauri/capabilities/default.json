@@ -1,0 +1,15 @@
+{
+  "identifier": "default",
+  "description": "Default permissions for pwd-vault",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "fs:default",
+    "fs:allow-exists",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-mkdir",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive"
+  ]
+}

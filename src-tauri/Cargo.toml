@@ -9,6 +9,7 @@ description = "Pwd-Vault password manager application"
 pwd-vault-core = { path = "../crates/core" }
 pwd-vault-tauri-plugin = { path = "../crates/tauri-plugin" }
 tauri = { version = "2", features = [] }
+tauri-plugin-fs = "2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }

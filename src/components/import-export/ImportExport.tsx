@@ -1,4 +1,5 @@
 import { For, Show, createSignal } from "solid-js";
+import { ArrowLeftRight, X, CheckCircle, Download, Upload, AlertTriangle } from "lucide-solid";
 import { vaultImport, vaultExport, detectImportFormat } from "../../api";
 import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport, copyToClipboard } from "../../stores/vault";
 
@@ -27,7 +28,7 @@ export default function ImportExport() {
   async function handleImport() {
     const data = importData().trim();
     if (!data) {
-      setStatus("❌ 请粘贴导入数据");
+      setStatus("请粘贴导入数据");
       return;
     }
     setBusy(true);
@@ -37,10 +38,10 @@ export default function ImportExport() {
       await saveVault();
       await refreshEntries();
       await refreshTrash();
-      setStatus(`✅ 成功导入 ${count} 条条目`);
+      setStatus(`成功导入 ${count} 条条目`);
       setImportData("");
     } catch (err) {
-      setStatus(`❌ 导入失败: ${err}`);
+      setStatus(`导入失败: ${err}`);
     } finally {
       setBusy(false);
     }
@@ -53,9 +54,9 @@ export default function ImportExport() {
       const result = await vaultExport(exportFormat());
       // Copy to clipboard
       await copyToClipboard(result);
-      setStatus(`✅ 已导出到剪贴板（${exportFormat().toUpperCase()} 格式）`);
+      setStatus(`已导出到剪贴板（${exportFormat().toUpperCase()} 格式）`);
     } catch (err) {
-      setStatus(`❌ 导出失败: ${err}`);
+      setStatus(`导出失败: ${err}`);
     } finally {
       setBusy(false);
     }
@@ -82,12 +83,12 @@ export default function ImportExport() {
         <div class="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
           {/* Header */}
           <div class="flex items-center justify-between border-b border-zinc-800 p-4">
-            <h3 class="text-lg font-bold">📦 导入导出</h3>
+            <h3 class="flex items-center gap-2 text-lg font-bold"><ArrowLeftRight size={20} /> 导入导出</h3>
             <button
               onClick={() => setShowImportExport(false)}
               class="text-zinc-500 hover:text-zinc-300"
             >
-              ✕
+              <X size={18} />
             </button>
           </div>
 
@@ -100,7 +101,7 @@ export default function ImportExport() {
                 }`}
                 onClick={() => setMode("import")}
               >
-                📥 导入
+                <Download size={14} /> 导入
               </button>
               <button
                 class={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium ${
@@ -108,7 +109,7 @@ export default function ImportExport() {
                 }`}
                 onClick={() => setMode("export")}
               >
-                📤 导出
+                <Upload size={14} /> 导出
               </button>
             </div>
 
@@ -163,8 +164,8 @@ export default function ImportExport() {
 
             <Show when={mode() === "export"}>
               <div class="space-y-3">
-                <div class="rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-400">
-                  ⚠️ 导出为明文数据，请妥善保管。导出后建议立即删除明文文件。
+                <div class="flex items-center gap-1.5 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-400">
+                  <AlertTriangle size={14} /> 导出为明文数据，请妥善保管。导出后建议立即删除明文文件。
                 </div>
                 <div>
                   <label class="mb-1 block text-xs text-zinc-400">导出格式</label>
@@ -205,7 +206,7 @@ export default function ImportExport() {
                 disabled={busy() || !importData().trim()}
                 class="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                {busy() ? "导入中..." : "📥 开始导入"}
+                {busy() ? "导入中..." : "开始导入"}
               </button>
             </Show>
             <Show when={mode() === "export"}>
@@ -214,7 +215,7 @@ export default function ImportExport() {
                 disabled={busy()}
                 class="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
               >
-                {busy() ? "导出中..." : "📤 导出到剪贴板"}
+                {busy() ? "导出中..." : "导出到剪贴板"}
               </button>
             </Show>
           </div>

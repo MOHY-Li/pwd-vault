@@ -371,6 +371,7 @@ fn export_csv(entries: &[Entry]) -> Result<String> {
             EntryType::Note => "note",
             EntryType::Card => "card",
             EntryType::Identity => "identity",
+            EntryType::Custom(ref s) => s.as_str(),
         };
         let tags = e.tags.join(";");
         let favorite_str = if e.favorite { "true" } else { "false" };

@@ -14,6 +14,9 @@ pub enum EntryType {
     Note,
     Card,
     Identity,
+    /// User-defined type with a custom label.
+    #[serde(rename = "custom")]
+    Custom(String),
 }
 
 // ---------------------------------------------------------------------------

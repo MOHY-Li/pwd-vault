@@ -79,8 +79,8 @@ export async function vaultOpen(masterPassword: string, path: string): Promise<v
   await invoke("vault_open", { masterPassword, path });
 }
 
-export async function vaultSave(masterPassword: string): Promise<void> {
-  await invoke("vault_save", { masterPassword });
+export async function vaultSave(): Promise<void> {
+  await invoke("vault_save");
 }
 
 export async function vaultLock(): Promise<void> {

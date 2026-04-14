@@ -1,5 +1,20 @@
 import { For, Show } from "solid-js";
 import {
+  Inbox,
+  Star,
+  KeyRound,
+  FileText,
+  CreditCard,
+  UserRound,
+  Search,
+  Plus,
+  Lock,
+  Trash2,
+  History,
+  ArrowLeftRight,
+  Wrench,
+} from "lucide-solid";
+import {
   entries,
   selectedEntryId,
   setSelectedEntryId,
@@ -18,13 +33,18 @@ import {
 import type { Entry } from "../../api";
 
 const FILTER_ITEMS = [
-  { key: "all" as const, label: "全部条目", icon: "📋" },
-  { key: "favorites" as const, label: "收藏", icon: "⭐" },
-  { key: "login" as const, label: "登录", icon: "🔑" },
-  { key: "note" as const, label: "笔记", icon: "📝" },
-  { key: "card" as const, label: "支付卡", icon: "💳" },
-  { key: "identity" as const, label: "身份", icon: "🪪" },
+  { key: "all", label: "全部", Icon: Inbox },
+  { key: "favorites", label: "收藏", Icon: Star },
+  { key: "login", label: "登录", Icon: KeyRound },
+  { key: "note", label: "笔记", Icon: FileText },
+  { key: "card", label: "卡包", Icon: CreditCard },
+  { key: "identity", label: "身份", Icon: UserRound },
 ];
+
+function getEntryIcon(entryType: string) {
+  const item = FILTER_ITEMS.find(i => i.key === entryType);
+  return item ? item.Icon : Inbox;
+}
 
 export default function Sidebar() {
   const filteredEntries = () => {
@@ -32,30 +52,14 @@ export default function Sidebar() {
     const filter = sidebarFilter();
 
     return entries.filter((e: Entry) => {
-      // Filter by category
       if (filter === "favorites" && !e.favorite) return false;
-      if (filter === "login" && e.entry_type !== "login") return false;
-      if (filter === "note" && e.entry_type !== "note") return false;
-      if (filter === "card" && e.entry_type !== "card") return false;
-      if (filter === "identity" && e.entry_type !== "identity") return false;
-
-      // Filter by search query
+      if (filter !== "all" && filter !== "favorites" && e.entry_type !== filter) return false;
       if (q) {
         const hay = `${e.title} ${e.username} ${e.url} ${e.tags.join(" ")}`.toLowerCase();
         return hay.includes(q);
       }
       return true;
     });
-  };
-
-  const categoryIcon = (type: string) => {
-    switch (type) {
-      case "login": return "🔑";
-      case "note": return "📝";
-      case "card": return "💳";
-      case "identity": return "🪪";
-      default: return "📋";
-    }
   };
 
   function handleNewEntry() {
@@ -82,107 +86,106 @@ export default function Sidebar() {
 
   return (
     <div class="flex h-full w-64 flex-col border-r border-zinc-800 bg-zinc-900">
-      {/* Search */}
-      <div class="border-b border-zinc-800 p-3">
+      {/* Search — compact */}
+      <div class="border-b border-zinc-800 px-3 py-2">
         <div class="relative">
-          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">🔍</span>
+          <Search size={14} class="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
           <input
             type="text"
             value={searchQuery()}
             onInput={(e) => setSearchQuery(e.currentTarget.value)}
             placeholder="搜索..."
-            class="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-sm text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+            class="w-full rounded-md border border-zinc-700 bg-zinc-800 py-1.5 pl-8 pr-3 text-xs text-zinc-200 placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
           />
         </div>
       </div>
 
-      {/* Filters */}
-      <div class="border-b border-zinc-800 p-2">
+      {/* Filters — 2 rows x 3 */}
+      <div class="border-b border-zinc-800 px-2 py-1.5 grid grid-cols-3 gap-1">
         <For each={FILTER_ITEMS}>
           {(item) => (
             <button
-              class={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              class={`flex items-center justify-center gap-1 rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors ${
                 sidebarFilter() === item.key
                   ? "bg-emerald-600/20 text-emerald-400"
-                  : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                  : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
               }`}
               onClick={() => setSidebarFilter(item.key)}
             >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <item.Icon size={12} />
+              {item.label}
             </button>
           )}
         </For>
       </div>
 
-      {/* Entry list */}
-      <div class="flex-1 overflow-y-auto p-2">
+      {/* Entry list — compact single-line items */}
+      <div class="flex-1 overflow-y-auto px-1.5 py-1">
         <For each={filteredEntries()}>
           {(entry) => (
             <button
-              class={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+              class={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                 selectedEntryId() === entry.id
                   ? "bg-zinc-800 text-zinc-100"
                   : "text-zinc-300 hover:bg-zinc-800/50"
               }`}
               onClick={() => setSelectedEntryId(entry.id)}
             >
-              <span class="text-lg">{categoryIcon(entry.entry_type)}</span>
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-sm font-medium">{entry.title || "无标题"}</div>
-                <div class="truncate text-xs text-zinc-500">{entry.username || entry.url}</div>
-              </div>
+              <span class="text-emerald-500 flex-shrink-0">{(() => { const Ic = getEntryIcon(entry.entry_type); return <Ic size={14} />; })()}</span>
+              <span class="truncate text-xs font-medium">{entry.title || "无标题"}</span>
               <Show when={entry.favorite}>
-                <span class="text-yellow-500">⭐</span>
+                <Star size={11} class="text-yellow-400 fill-yellow-400 flex-shrink-0" />
               </Show>
             </button>
           )}
         </For>
         <Show when={filteredEntries().length === 0}>
-          <div class="py-8 text-center text-sm text-zinc-600">暂无条目</div>
+          <div class="py-6 text-center text-xs text-zinc-600">暂无条目</div>
         </Show>
       </div>
 
-      {/* Bottom actions */}
-      <div class="border-t border-zinc-800 p-3 space-y-2">
+      {/* Bottom actions — compact */}
+      <div class="border-t border-zinc-800 p-2 space-y-1.5">
         <button
           onClick={handleNewEntry}
-          class="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
+          class="flex w-full items-center justify-center gap-1.5 rounded-md bg-emerald-600 px-2 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500"
         >
-          <span>＋</span> 新建条目
+          <Plus size={14} /> 新建条目
         </button>
-        <div class="grid grid-cols-2 gap-1.5">
+        <div class="grid grid-cols-3 gap-1">
           <button
             onClick={() => setShowGenerator(true)}
-            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+            class="flex items-center justify-center gap-1 rounded-md bg-zinc-800 px-1 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
           >
-            🔧 生成器
+            <Wrench size={10} /> 生成
           </button>
           <button
             onClick={() => setShowImportExport(true)}
-            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+            class="flex items-center justify-center gap-1 rounded-md bg-zinc-800 px-1 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
           >
-            📦 导入导出
+            <ArrowLeftRight size={10} /> 数据
           </button>
           <button
             onClick={() => setShowTrash(true)}
-            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
+            class="flex items-center justify-center gap-1 rounded-md bg-zinc-800 px-1 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
           >
-            🗑️ 回收站
-          </button>
-          <button
-            onClick={() => setShowAuditLog(true)}
-            class="rounded-lg bg-zinc-800 px-2 py-1.5 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
-          >
-            📋 审计日志
+            <Trash2 size={10} /> 回收
           </button>
         </div>
-        <button
-          onClick={() => lockVault()}
-          class="w-full rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300 transition-colors hover:bg-zinc-700"
-        >
-          🔒 锁定
-        </button>
+        <div class="grid grid-cols-2 gap-1">
+          <button
+            onClick={() => setShowAuditLog(true)}
+            class="flex items-center justify-center gap-1 rounded-md bg-zinc-800 px-1 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+          >
+            <History size={10} /> 日志
+          </button>
+          <button
+            onClick={() => lockVault()}
+            class="flex items-center justify-center gap-1 rounded-md bg-zinc-800 px-1 py-1 text-[10px] text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+          >
+            <Lock size={10} /> 锁定
+          </button>
+        </div>
       </div>
     </div>
   );

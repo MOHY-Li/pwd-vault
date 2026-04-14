@@ -1,12 +1,13 @@
 import { For, Show, createSignal } from "solid-js";
 import { trash, showTrash, setShowTrash, refreshTrash, restoreEntry, purgeEntry, emptyTrash } from "../../stores/vault";
 import type { Entry } from "../../api";
+import { KeyRound, FileText, CreditCard, UserRound, Trash2, X, Recycle } from "lucide-solid";
 
-const typeIcon: Record<Entry["entry_type"], string> = {
-  login: "🔑",
-  note: "📝",
-  card: "💳",
-  identity: "🪪",
+const typeIcon: Record<Entry["entry_type"], typeof KeyRound> = {
+  login: KeyRound,
+  note: FileText,
+  card: CreditCard,
+  identity: UserRound,
 };
 
 const typeLabel: Record<Entry["entry_type"], string> = {
@@ -69,7 +70,7 @@ export default function Trash() {
           {/* Header */}
           <div class="flex items-center justify-between border-b border-zinc-800 px-6 py-4">
             <div class="flex items-center gap-3">
-              <h3 class="text-lg font-bold text-zinc-100">🗑️ 回收站</h3>
+              <h3 class="flex items-center gap-2 text-lg font-bold text-zinc-100"><Trash2 size={20} /> 回收站</h3>
               <span class="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs text-zinc-400">
                 {trash.length} 个条目
               </span>
@@ -78,7 +79,7 @@ export default function Trash() {
               onClick={close}
               class="text-zinc-500 transition-colors hover:text-zinc-300"
             >
-              ✕
+              <X size={18} />
             </button>
           </div>
 
@@ -88,7 +89,7 @@ export default function Trash() {
               when={trash.length > 0}
               fallback={
                 <div class="flex flex-col items-center justify-center py-16 text-zinc-500">
-                  <span class="mb-3 text-5xl">♻️</span>
+                  <Recycle size={48} class="mb-3 text-zinc-500" />
                   <p class="text-sm">回收站是空的</p>
                 </div>
               }
@@ -99,7 +100,9 @@ export default function Trash() {
                     <div class="group rounded-lg border border-zinc-800 bg-zinc-800/50 p-3 transition-colors hover:border-zinc-700">
                       <div class="flex items-start gap-3">
                         {/* Icon */}
-                        <span class="mt-0.5 text-lg">{typeIcon[entry.entry_type]}</span>
+                        <span class="mt-0.5 text-lg text-zinc-400">
+                          {(() => { const Icon = typeIcon[entry.entry_type]; return <Icon size={18} />; })()}
+                        </span>
 
                         {/* Info */}
                         <div class="min-w-0 flex-1">

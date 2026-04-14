@@ -1,4 +1,5 @@
 import { createSignal, Show } from "solid-js";
+import { Wrench, X, Check, Copy, RefreshCw } from "lucide-solid";
 import { generatePassword, evaluateStrength } from "../../api";
 import type { StrengthReport } from "../../api";
 import { showGenerator, setShowGenerator, copyToClipboard } from "../../stores/vault";
@@ -52,12 +53,12 @@ export default function PasswordGen() {
     <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div class="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl">
         <div class="mb-4 flex items-center justify-between">
-          <h3 class="text-lg font-bold">🔧 密码生成器</h3>
+          <h3 class="flex items-center gap-2 text-lg font-bold"><Wrench size={20} /> 密码生成器</h3>
           <button
             onClick={() => setShowGenerator(false)}
             class="text-zinc-500 hover:text-zinc-300"
           >
-            ✕
+            <X size={18} />
           </button>
         </div>
 
@@ -142,7 +143,7 @@ export default function PasswordGen() {
             <div class="flex items-center gap-2 rounded-lg bg-zinc-800 p-3">
               <code class="min-w-0 flex-1 break-all text-sm text-emerald-400">{result()}</code>
               <button onClick={handleCopy} class="text-zinc-400 hover:text-zinc-200">
-                {copied() ? "✅" : "📋"}
+                {copied() ? <><Check size={14} class="inline" /> 已复制</> : <><Copy size={14} class="inline" /> 复制</>}
               </button>
             </div>
             <Show when={strength()}>
@@ -168,7 +169,7 @@ export default function PasswordGen() {
           onClick={handleGenerate}
           class="mt-4 w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500"
         >
-          🔄 重新生成
+          <RefreshCw size={14} class="inline" /> 重新生成
         </button>
       </div>
     </div>
