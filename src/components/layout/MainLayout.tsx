@@ -1,4 +1,4 @@
-import { Show, onMount, onCleanup } from "solid-js";
+import { Show, onMount, onCleanup, createSignal } from "solid-js";
 import Sidebar from "./Sidebar";
 import MainContent from "../vault/MainContent";
 import EntryEditor from "../vault/EntryEditor";
@@ -20,10 +20,14 @@ import {
   setShowImportExport,
   isUnlocked,
   lockVault,
+  onClipboardError,
 } from "../../stores/vault";
 import type { Entry } from "../../api";
 
 export default function MainLayout() {
+  // M2: Toast notification for clipboard errors
+  const [toast, setToast] = createSignal("");
+
   function handleKeyDown(e: KeyboardEvent) {
     if (!isUnlocked()) return;
 
@@ -100,6 +104,11 @@ export default function MainLayout() {
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown);
+    // M2: Wire up clipboard error callback
+    onClipboardError((msg) => {
+      setToast(msg);
+      setTimeout(() => setToast(""), 3000);
+    });
   });
 
   onCleanup(() => {
@@ -125,6 +134,12 @@ export default function MainLayout() {
       </Show>
       <Show when={showImportExport()}>
         <ImportExport />
+      </Show>
+      {/* M2: Clipboard error toast */}
+      <Show when={toast()}>
+        <div class="fixed bottom-4 left-1/2 -translate-x-1/2 rounded-lg bg-red-500/90 px-4 py-2 text-sm text-white shadow-lg z-[100]">
+          {toast()}
+        </div>
       </Show>
     </>
   );

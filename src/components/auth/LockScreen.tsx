@@ -52,22 +52,26 @@ export default function LockScreen() {
       } else {
         await unlockVault(pwd, defaultPath());
       }
-    } catch (err: any) {
-      setError(err?.toString() || "操作失败");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   }
 
-  /** M5: Handle clicking the "Create" tab when a vault already exists */
+  /** H1: Handle clicking the "Create" tab when a vault already exists */
   function handleCreateTabClick() {
     if (vaultFileExists()) {
-      // Toggle warning — clicking again confirms they want to create
+      // If warning is already showing, user confirms → switch to create mode
       if (showCreateWarning()) {
         setShowCreateWarning(false);
         setIsSetup(true);
-      } else {
+      } else if (!isSetup()) {
+        // First click when vault exists and we're in unlock mode → show warning
         setShowCreateWarning(true);
+      } else {
+        // Already in setup mode (no prior warning needed), just stay
+        setIsSetup(true);
       }
     } else {
       setIsSetup(true);
@@ -112,8 +116,8 @@ export default function LockScreen() {
           </button>
         </div>
 
-        {/* M5: Warning when vault exists and user tries to create */}
-        <Show when={showCreateWarning() && isSetup()}>
+        {/* H1: Warning when vault exists and user tries to create */}
+        <Show when={showCreateWarning()}>
           <div class="mb-4 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
             <AlertTriangle size={16} class="text-amber-400 mt-0.5 flex-shrink-0" />
             <div class="text-xs text-amber-300">

@@ -1,4 +1,4 @@
-import { Show, For, Switch, Match, createSignal, createEffect } from "solid-js";
+import { Show, For, Switch, Match, createSignal, createEffect, JSX } from "solid-js";
 import {
   KeyRound, FileText, CreditCard, UserRound, X, ChevronDown, ChevronRight, Check, Sparkles,
   Star, Tag, Wrench, PlusCircle, AlertTriangle,
@@ -42,6 +42,10 @@ export default function EntryEditor() {
   const [addingField, setAddingField] = createSignal(false);
   // M7: Unsaved changes tracking
   const [showCancelConfirm, setShowCancelConfirm] = createSignal(false);
+  // M1: Save error tracking
+  const [saveError, setSaveError] = createSignal("");
+  // M3: Local TOTP URI input signal
+  const [totpInput, setTotpInput] = createSignal("");
 
   // Generator options
   const [genLength, setGenLength] = createSignal(20);
@@ -55,7 +59,7 @@ export default function EntryEditor() {
   const initForm = () => form() ?? editingEntry();
   const entry = () => initForm();
 
-  function updateField(field: keyof Entry, value: any) {
+  function updateField(field: keyof Entry, value: string | boolean | string[] | CustomField[] | null) {
     const e = entry();
     if (!e) return;
     setForm({ ...e, [field]: value });
@@ -108,6 +112,7 @@ export default function EntryEditor() {
     const e = form();
     if (!e || !e.title.trim()) return;
     setSaving(true);
+    setSaveError("");
     try {
       // Password history: save old password if changed
       if (!editingIsNew()) {
@@ -128,6 +133,8 @@ export default function EntryEditor() {
       setEditingEntry(null);
       setForm(null);
       setShowCancelConfirm(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -138,6 +145,8 @@ export default function EntryEditor() {
     if (src) {
       setForm({ ...src });
       setShowCancelConfirm(false);
+      setSaveError("");
+      setTotpInput("");
       if (src.password) {
         evaluateStrength(src.password)
           .then(r => setStrength(r))
@@ -314,9 +323,10 @@ export default function EntryEditor() {
                   <FieldLabel text="TOTP URI" />
                   <input
                     type="text"
-                    value={""}
+                    value={totpInput()}
                     onInput={async (e) => {
                       const uri = e.currentTarget.value.trim();
+                      setTotpInput(e.currentTarget.value);
                       if (uri.startsWith("otpauth://")) {
                         try { const config = await totpParseUri(uri); const ent = entry(); if (ent) setForm({ ...ent, totp: config }); } catch {}
                       }
@@ -365,9 +375,17 @@ export default function EntryEditor() {
                 <div>
                   <FieldLabel text="卡号" />
                   <input type="text" value={entry()?.password ?? ""} onInput={(e) => {
+                    // L7: Save cursor position before formatting
+                    const el = e.currentTarget;
+                    const cursor = el.selectionStart ?? 0;
+                    const prevLen = el.value.length;
                     // M6: Use smart card number formatting (Amex support)
-                    const formatted = formatCardNumber(e.currentTarget.value);
+                    const formatted = formatCardNumber(el.value);
                     updateField("password", formatted);
+                    // L7: Restore cursor position with adjustment for length change
+                    const delta = formatted.length - prevLen;
+                    const newPos = Math.min(cursor + delta, formatted.length);
+                    queueMicrotask(() => { el.selectionStart = el.selectionEnd = newPos; });
                   }} class="input-field !font-mono" placeholder="0000 0000 0000 0000" />
                 </div>
               </Match>
@@ -493,6 +511,12 @@ export default function EntryEditor() {
 
           {/* Footer */}
           <div class="flex justify-end gap-2 border-t border-zinc-800 px-5 py-3">
+            {/* M1: Save error display */}
+            <Show when={saveError()}>
+              <div class="mr-auto flex-1 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs text-red-400">
+                {saveError()}
+              </div>
+            </Show>
             {/* M7: Cancel button triggers unsaved changes check */}
             <button
               onClick={handleCancel}
@@ -540,33 +564,13 @@ export default function EntryEditor() {
         </div>
       </div>
 
-      {/* Global input styles */}
-      <style>{`
-        .input-field {
-          width: 100%;
-          border-radius: 0.5rem;
-          border: 1px solid #3f3f46;
-          background: #27272a;
-          padding: 0.5rem 0.75rem;
-          font-size: 0.75rem;
-          color: #f4f4f5;
-          outline: none;
-          transition: border-color 0.15s;
-        }
-        .input-field:focus { border-color: #10b981; }
-        .input-field::placeholder { color: #52525b; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 2px; }
-        ::-webkit-scrollbar-thumb:hover { background: #52525b; }
-      `}</style>
     </Show>
   );
 }
 
 // ---- Helpers ----
 
-function SectionHeader(props: { icon: any; title: string }) {
+function SectionHeader(props: { icon: JSX.Element; title: string }) {
   return (
     <div class="flex items-center gap-1.5 pt-1">
       <span class="text-emerald-500">{props.icon}</span>

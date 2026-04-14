@@ -1,4 +1,4 @@
-import { For, Show, createSignal, createEffect } from "solid-js";
+import { For, Show, createSignal, createEffect, JSX } from "solid-js";
 import {
   ClipboardList,
   Lock,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   X,
 } from "lucide-solid";
+import type { LucideIcon } from "lucide-solid";
 import { auditRecent } from "../../api";
 import type { AuditEntry } from "../../api";
 import { showAuditLog, setShowAuditLog } from "../../stores/vault";
@@ -28,9 +29,9 @@ export default function AuditLog() {
     setLoaded(true);
   }
 
-  function formatEvent(entry: AuditEntry): any {
+  function formatEvent(entry: AuditEntry): JSX.Element {
     const e = entry.event_type;
-    const icon = (I: any, label: string, extra?: string) => (
+    const icon = (I: LucideIcon, label: string, extra?: string): JSX.Element => (
       <span class="inline-flex items-center gap-1.5">
         <I size={14} class="inline shrink-0" />
         {label}{extra ?? ""}

@@ -1,7 +1,8 @@
-import { Show, For, createSignal, createEffect, onCleanup, Switch, Match } from "solid-js";
+import { Show, For, createSignal, createEffect, onCleanup, Switch, Match, JSX } from "solid-js";
 import {
   Trash2, Check, Copy, Pencil, Eye, EyeOff, Shield, KeyRound, FileText, CreditCard, UserRound, Star, Calendar, Tag, PlusCircle, AlertTriangle,
 } from "lucide-solid";
+import type { LucideIcon } from "lucide-solid";
 import { entries, selectedEntryId, setEditingEntry, setEditingIsNew, deleteEntry, totpCodes, refreshTotp, copyToClipboard } from "../../stores/vault";
 import type { CustomField } from "../../api";
 
@@ -21,11 +22,15 @@ export default function MainContent() {
     }
   });
 
+  // L2: Timer ref to prevent copied race condition
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
   async function handleCopy(text: string, field: string) {
     const ok = await copyToClipboard(text);
     if (ok) {
+      if (copiedTimer) clearTimeout(copiedTimer);
       setCopied(field);
-      setTimeout(() => setCopied(""), 2000);
+      copiedTimer = setTimeout(() => setCopied(""), 2000);
     }
   }
 
@@ -255,7 +260,7 @@ export default function MainContent() {
 
 // ---- Sub-components ----
 
-function SectionTitle(props: { icon: any; title: string }) {
+function SectionTitle(props: { icon: JSX.Element; title: string }) {
   return (
     <div class="mb-2 flex items-center gap-1.5">
       <span class="text-emerald-500">{props.icon}</span>
@@ -265,7 +270,7 @@ function SectionTitle(props: { icon: any; title: string }) {
 }
 
 function EntryTypeIcon(props: { type: string; size: number }) {
-  const map: Record<string, any> = { login: KeyRound, note: FileText, card: CreditCard, identity: UserRound };
+  const map: Record<string, LucideIcon> = { login: KeyRound, note: FileText, card: CreditCard, identity: UserRound };
   const Ic = map[props.type] || KeyRound;
   return <Ic size={props.size} class="text-emerald-500" />;
 }

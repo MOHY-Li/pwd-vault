@@ -41,7 +41,7 @@ export default function ImportExport() {
       setStatus(`成功导入 ${count} 条条目`);
       setImportData("");
     } catch (err) {
-      setStatus(`导入失败: ${err}`);
+      setStatus(`导入失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
@@ -63,7 +63,7 @@ export default function ImportExport() {
       URL.revokeObjectURL(url);
       setStatus(`已导出为 ${ext.toUpperCase()} 文件`);
     } catch (err) {
-      setStatus(`导出失败: ${err}`);
+      setStatus(`导出失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
