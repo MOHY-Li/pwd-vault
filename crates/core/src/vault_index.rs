@@ -83,7 +83,7 @@ pub struct Folder {
 
 impl VaultIndex {
     /// Create a fresh, empty index.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         let now = Utc::now();
         Self {
@@ -138,7 +138,7 @@ impl VaultIndex {
     }
 
     /// Get a reference to an entry by ID.
-    #[must_use] 
+    #[must_use]
     pub fn get_entry(&self, id: &str) -> Option<&IndexEntry> {
         self.entries.iter().find(|e| e.id == id)
     }
@@ -182,7 +182,7 @@ impl VaultIndex {
     }
 
     /// Return all entries of a given category.
-    #[must_use] 
+    #[must_use]
     pub fn entries_by_category(&self, category: &str) -> Vec<&IndexEntry> {
         self.entries
             .iter()
@@ -191,13 +191,13 @@ impl VaultIndex {
     }
 
     /// Return all favorite entries.
-    #[must_use] 
+    #[must_use]
     pub fn favorites(&self) -> Vec<&IndexEntry> {
         self.entries.iter().filter(|e| e.favorite).collect()
     }
 
     /// Return entries belonging to a folder.
-    #[must_use] 
+    #[must_use]
     pub fn entries_by_folder(&self, folder_id: &str) -> Vec<&IndexEntry> {
         self.entries
             .iter()
@@ -206,13 +206,13 @@ impl VaultIndex {
     }
 
     /// Number of live entries.
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether the index has zero live entries.
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -259,9 +259,10 @@ impl VaultIndex {
         // Move orphaned entries to root
         for e in &mut self.entries {
             if let Some(ref fid) = e.folder_id
-                && remove_set.contains(fid.as_str()) {
-                    e.folder_id = None;
-                }
+                && remove_set.contains(fid.as_str())
+            {
+                e.folder_id = None;
+            }
         }
 
         if self.folders.len() < before {
@@ -273,7 +274,7 @@ impl VaultIndex {
     }
 
     /// Get a reference to a folder by ID.
-    #[must_use] 
+    #[must_use]
     pub fn get_folder(&self, id: &str) -> Option<&Folder> {
         self.folders.iter().find(|f| f.id == id)
     }
@@ -443,11 +444,27 @@ mod tests {
         let mut idx = VaultIndex::new();
 
         // root -> child -> grandchild
-        idx.add_folder(Folder { id: "root".into(), name_enc: "r".into(), parent_id: None });
-        idx.add_folder(Folder { id: "child".into(), name_enc: "c".into(), parent_id: Some("root".into()) });
-        idx.add_folder(Folder { id: "grandchild".into(), name_enc: "gc".into(), parent_id: Some("child".into()) });
+        idx.add_folder(Folder {
+            id: "root".into(),
+            name_enc: "r".into(),
+            parent_id: None,
+        });
+        idx.add_folder(Folder {
+            id: "child".into(),
+            name_enc: "c".into(),
+            parent_id: Some("root".into()),
+        });
+        idx.add_folder(Folder {
+            id: "grandchild".into(),
+            name_enc: "gc".into(),
+            parent_id: Some("child".into()),
+        });
         // unrelated folder (should survive)
-        idx.add_folder(Folder { id: "other".into(), name_enc: "o".into(), parent_id: None });
+        idx.add_folder(Folder {
+            id: "other".into(),
+            name_enc: "o".into(),
+            parent_id: None,
+        });
 
         // entries in child and grandchild
         let mut e1 = make_entry("e1", "t1", "login", &[]);

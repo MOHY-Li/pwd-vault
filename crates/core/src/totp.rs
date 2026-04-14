@@ -34,8 +34,8 @@ pub fn generate_totp(config: &TotpConfig) -> Result<String> {
         1, // skew: allow ±1 step for clock drift
         u64::from(config.period),
         secret,
-        None,           // issuer – not needed for generation
-        String::new(),  // account_name – not needed for generation
+        None,          // issuer – not needed for generation
+        String::new(), // account_name – not needed for generation
     );
 
     let code = totp
@@ -48,7 +48,7 @@ pub fn generate_totp(config: &TotpConfig) -> Result<String> {
 /// Return the number of seconds remaining until the current TOTP code expires.
 ///
 /// The value is always in `1..=config.period`.
-#[must_use] 
+#[must_use]
 pub fn time_remaining(config: &TotpConfig) -> u32 {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

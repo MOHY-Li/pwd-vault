@@ -11,14 +11,14 @@
 #![allow(clippy::case_sensitive_file_extension_comparisons)]
 #![allow(clippy::float_cmp)]
 
-pub mod error;
-pub mod entry;
+pub mod audit;
 pub mod crypto;
+pub mod dedup;
+pub mod entry;
+pub mod error;
 pub mod generator;
+pub mod import_export;
 pub mod strength;
+pub mod totp;
 pub mod vault;
 pub mod vault_index;
-pub mod totp;
-pub mod import_export;
-pub mod audit;
-pub mod dedup;

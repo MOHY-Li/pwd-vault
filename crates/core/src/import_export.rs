@@ -43,15 +43,32 @@ pub fn import_entries(format: &ImportFormat, data: &str) -> Result<Vec<Entry>> {
 // ---------------------------------------------------------------------------
 
 /// Serialise entries into the requested format and return the resulting string.
-pub fn export_entries(entries: &[Entry], format: &ExportFormat) -> Result<String> {
-    match format {
-        ExportFormat::Json => export_json(entries),
-        ExportFormat::Csv => export_csv(entries),
-        ExportFormat::VaultFile => {
-            // A full encrypted .vault copy is handled at a higher layer
-            // (it needs the master key).  Here we just return the JSON
-            // representation that would be encrypted.
-            export_json(entries)
+/// If `exclude_passwords` is true, password fields are replaced with empty strings.
+pub fn export_entries(
+    entries: &[Entry],
+    format: &ExportFormat,
+    exclude_passwords: bool,
+) -> Result<String> {
+    if exclude_passwords {
+        // Clone and strip passwords
+        let sanitized: Vec<Entry> = entries
+            .iter()
+            .map(|e| {
+                let mut s = e.clone();
+                s.password.clear();
+                s.password_history.clear();
+                s.totp = None;
+                s
+            })
+            .collect();
+        match format {
+            ExportFormat::Json | ExportFormat::VaultFile => export_json(&sanitized),
+            ExportFormat::Csv => export_csv(&sanitized),
+        }
+    } else {
+        match format {
+            ExportFormat::Json | ExportFormat::VaultFile => export_json(entries),
+            ExportFormat::Csv => export_csv(entries),
         }
     }
 }
@@ -61,7 +78,7 @@ pub fn export_entries(entries: &[Entry], format: &ExportFormat) -> Result<String
 // ---------------------------------------------------------------------------
 
 /// Try to guess the import format from the data and an optional filename hint.
-#[must_use] 
+#[must_use]
 pub fn detect_format(data: &str, filename: Option<&str>) -> ImportFormat {
     let fname = filename.unwrap_or("").to_lowercase();
 
@@ -173,18 +190,20 @@ fn import_bitwarden_json(data: &str) -> Result<Vec<Entry>> {
             e.username = login["username"].as_str().unwrap_or("").to_string();
             e.password = login["password"].as_str().unwrap_or("").to_string();
             if let Some(uris) = login.get("uris").and_then(|u| u.as_array())
-                && let Some(first_uri) = uris.first() {
-                    e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
-                }
+                && let Some(first_uri) = uris.first()
+            {
+                e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
+            }
         }
 
         e.notes = item["notes"].as_str().unwrap_or("").to_string();
 
         // folder
         if let Some(folder) = item.get("folderName").and_then(|f| f.as_str())
-            && !folder.is_empty() {
-                e.folder = Some(folder.to_string());
-            }
+            && !folder.is_empty()
+        {
+            e.folder = Some(folder.to_string());
+        }
 
         // favorite
         if let Some(fav) = item.get("favorite").and_then(serde_json::Value::as_bool) {
@@ -325,9 +344,7 @@ fn import_keepass_xml(data: &str) -> Result<Vec<Entry>> {
     }
 
     if entries.is_empty() {
-        return Err(VaultError::Import(
-            "No KeePass entries found in XML".into(),
-        ));
+        return Err(VaultError::Import("No KeePass entries found in XML".into()));
     }
 
     Ok(entries)
@@ -362,8 +379,10 @@ fn export_csv(entries: &[Entry]) -> Result<String> {
     let mut wtr = csv::Writer::from_writer(Vec::new());
 
     // header
-    wtr.write_record(["title", "url", "username", "password", "notes", "type", "favorite", "tags"])
-        .map_err(|e| VaultError::Export(format!("CSV write error: {e}")))?;
+    wtr.write_record([
+        "title", "url", "username", "password", "notes", "type", "favorite", "tags",
+    ])
+    .map_err(|e| VaultError::Export(format!("CSV write error: {e}")))?;
 
     for e in entries {
         let type_str = match e.entry_type {
@@ -417,7 +436,7 @@ mod tests {
     #[test]
     fn test_json_roundtrip() {
         let entries = vec![sample_entry()];
-        let exported = export_entries(&entries, &ExportFormat::Json).unwrap();
+        let exported = export_entries(&entries, &ExportFormat::Json, false).unwrap();
         let imported = import_entries(&ImportFormat::Json, &exported).unwrap();
         assert_eq!(imported.len(), 1);
         assert_eq!(imported[0].title, "Test Site");
@@ -430,7 +449,7 @@ mod tests {
     #[test]
     fn test_csv_export_import() {
         let entries = vec![sample_entry()];
-        let exported = export_entries(&entries, &ExportFormat::Csv).unwrap();
+        let exported = export_entries(&entries, &ExportFormat::Csv, false).unwrap();
         let imported = import_entries(&ImportFormat::Csv, &exported).unwrap();
         assert_eq!(imported.len(), 1);
         assert_eq!(imported[0].title, "Test Site");

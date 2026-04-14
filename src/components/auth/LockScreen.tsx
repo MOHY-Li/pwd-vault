@@ -52,6 +52,9 @@ export default function LockScreen() {
       } else {
         await unlockVault(pwd, defaultPath());
       }
+      // F6: Clear passwords from memory after successful operation
+      setPassword("");
+      setConfirmPassword("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {

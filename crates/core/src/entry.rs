@@ -149,7 +149,7 @@ pub struct Entry {
 
 impl Entry {
     /// Create a new entry with a generated UUID and current timestamps.
-    #[must_use] 
+    #[must_use]
     pub fn new(title: String, entry_type: EntryType) -> Self {
         let now = Utc::now();
         Self {
@@ -177,7 +177,7 @@ impl Entry {
     }
 
     /// Case-insensitive search across the main text fields and tags.
-    #[must_use] 
+    #[must_use]
     pub fn matches_search(&self, query: &str) -> bool {
         let q = query.to_lowercase();
         let hay = format!(

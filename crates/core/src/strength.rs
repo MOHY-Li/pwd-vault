@@ -31,32 +31,22 @@ pub struct StrengthReport {
 
 /// Top-20 most common passwords (used for pattern detection).
 const COMMON_PASSWORDS: &[&str] = &[
-    "password",
-    "123456",
-    "12345678",
-    "qwerty",
-    "abc123",
-    "monkey",
-    "1234567",
-    "letmein",
-    "trustno1",
-    "dragon",
-    "baseball",
-    "iloveyou",
-    "master",
-    "sunshine",
-    "ashley",
-    "bailey",
-    "passw0rd",
-    "shadow",
-    "123123",
-    "654321",
+    "password", "123456", "12345678", "qwerty", "abc123", "monkey", "1234567", "letmein",
+    "trustno1", "dragon", "baseball", "iloveyou", "master", "sunshine", "ashley", "bailey",
+    "passw0rd", "shadow", "123123", "654321",
 ];
 
 /// Keyboard-walk patterns (lowercase, forward direction).
 const KEYBOARD_WALKS: &[&str] = &[
-    "qwerty", "qwertz", "asdf", "zxcv", "qazwsx", "1qaz2wsx", "1234qwer",
-    "!@#$%^&*", "qweasdzxc",
+    "qwerty",
+    "qwertz",
+    "asdf",
+    "zxcv",
+    "qazwsx",
+    "1qaz2wsx",
+    "1234qwer",
+    "!@#$%^&*",
+    "qweasdzxc",
 ];
 
 /// Online attack guess rate (guesses per second).
@@ -73,7 +63,7 @@ const SECS_PER_YEAR: f64 = 31_536_000.0;
 // ---------------------------------------------------------------------------
 
 /// Evaluate the strength of `password` and return a full [`StrengthReport`].
-#[must_use] 
+#[must_use]
 pub fn evaluate_password(password: &str) -> StrengthReport {
     let mut warnings: Vec<String> = Vec::new();
     let mut suggestions: Vec<String> = Vec::new();
@@ -115,9 +105,8 @@ pub fn evaluate_password(password: &str) -> StrengthReport {
             .filter(|&&x| x)
             .count();
         if charset_count < 3 {
-            suggestions.push(
-                "Mix uppercase, lowercase, digits, and symbols for higher entropy".into(),
-            );
+            suggestions
+                .push("Mix uppercase, lowercase, digits, and symbols for higher entropy".into());
         }
     }
 
@@ -142,7 +131,7 @@ pub fn evaluate_password(password: &str) -> StrengthReport {
 /// Estimated time to crack (seconds) at [`GUESS_RATE`] guesses/sec.
 ///
 /// `guesses = 2^entropy`, so `seconds = guesses / rate`.
-#[must_use] 
+#[must_use]
 pub fn estimate_crack_time_seconds(entropy: f64) -> f64 {
     if entropy <= 0.0 {
         return 0.0;
@@ -151,7 +140,7 @@ pub fn estimate_crack_time_seconds(entropy: f64) -> f64 {
 }
 
 /// Convert seconds into a human-readable string.
-#[must_use] 
+#[must_use]
 pub fn format_crack_time(seconds: f64) -> String {
     if seconds < 1.0 {
         "instant".into()
@@ -206,9 +195,12 @@ fn calculate_entropy(password: &str) -> f64 {
         }
     }
 
-    let pool_size: f64 = f64::from(u32::from(pool & 1 != 0) * 26
-        + u32::from((pool >> 1) & 1 != 0) * 26
-        + u32::from((pool >> 2) & 1 != 0) * 10 + u32::from((pool >> 3) & 1 != 0) * 33);
+    let pool_size: f64 = f64::from(
+        u32::from(pool & 1 != 0) * 26
+            + u32::from((pool >> 1) & 1 != 0) * 26
+            + u32::from((pool >> 2) & 1 != 0) * 10
+            + u32::from((pool >> 3) & 1 != 0) * 33,
+    );
 
     if pool_size <= 1.0 {
         // e.g. single repeated char → at most 1 bit of info
@@ -357,10 +349,12 @@ mod tests {
     #[test]
     fn test_common_password() {
         let report = evaluate_password("password");
-        assert!(report
-            .warnings
-            .iter()
-            .any(|w| w.contains("most common passwords")));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| w.contains("most common passwords"))
+        );
     }
 
     #[test]

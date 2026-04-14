@@ -181,8 +181,8 @@ export async function vaultImport(format: string, data: string): Promise<number>
   return parseInt(count, 10);
 }
 
-export async function vaultExport(format: string): Promise<string> {
-  return await invoke<string>("vault_export", { format });
+export async function vaultExport(format: string, excludePasswords: boolean = false): Promise<string> {
+  return await invoke<string>("vault_export", { format, excludePasswords });
 }
 
 export async function detectImportFormat(data: string, filename?: string): Promise<string> {

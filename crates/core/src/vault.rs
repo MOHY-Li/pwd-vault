@@ -12,15 +12,15 @@
 
 use std::io::{Cursor, Read, Write};
 
-use base64::Engine;
 use crate::crypto::{
-    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_mac_key,
-    derive_master_key, derive_vault_key, encrypt, generate_salt, verify_and_derive_key,
-    verify_mac, EncryptedData, MasterKey,
+    EncryptedData, MasterKey, compute_mac, decrypt, derive_auth_hash, derive_entry_key,
+    derive_mac_key, derive_master_key, derive_vault_key, encrypt, generate_salt,
+    verify_and_derive_key, verify_mac,
 };
 use crate::entry::Entry;
 use crate::error::{Result, VaultError};
 use crate::vault_index::{IndexEntry, VaultIndex};
+use base64::Engine;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -167,7 +167,9 @@ impl VaultFile {
         let mut expected_mac_arr = [0u8; 32];
         expected_mac_arr.copy_from_slice(stored_mac);
         if !verify_mac(&data[..file_mac_pos], &expected_mac_arr, &mac_key) {
-            return Err(VaultError::VaultCorrupted("file MAC verification failed".into()));
+            return Err(VaultError::VaultCorrupted(
+                "file MAC verification failed".into(),
+            ));
         }
 
         // Now we need to figure out where the encrypted index ends and entry data begins.
@@ -248,8 +250,7 @@ impl VaultFile {
         let deleted_entries: Vec<Entry> = if index.deleted_entries_json.is_empty() {
             Vec::new()
         } else {
-            serde_json::from_str(&index.deleted_entries_json)
-                .unwrap_or_default()
+            serde_json::from_str(&index.deleted_entries_json).unwrap_or_default()
         };
 
         Ok(Self {
@@ -474,7 +475,7 @@ impl VaultFile {
     }
 
     /// Get an entry by id (returns a cloned copy).
-    #[must_use] 
+    #[must_use]
     pub fn get_entry(&self, id: &str) -> Option<Entry> {
         self.entries.iter().find(|e| e.id == id).cloned()
     }
@@ -501,10 +502,17 @@ impl VaultFile {
     pub fn restore_entry(&mut self, id: &str) -> bool {
         if let Some(pos) = self.deleted_entries.iter().position(|e| e.id == id) {
             let entry = self.deleted_entries.swap_remove(pos);
+            let entry_type_str = match entry.entry_type {
+                crate::entry::EntryType::Login => "login",
+                crate::entry::EntryType::Note => "note",
+                crate::entry::EntryType::Card => "card",
+                crate::entry::EntryType::Identity => "identity",
+                crate::entry::EntryType::Custom(ref s) => s.as_str(),
+            };
             let idx_entry = IndexEntry {
                 id: entry.id.clone(),
                 title_enc: base64::engine::general_purpose::STANDARD.encode(&entry.title),
-                category: format!("{:?}", entry.entry_type).to_lowercase(),
+                category: entry_type_str.to_string(),
                 tags: entry.tags.clone(),
                 offset: 0,
                 length: 0,
@@ -541,13 +549,13 @@ impl VaultFile {
     }
 
     /// Return a reference to all decrypted entries.
-    #[must_use] 
+    #[must_use]
     pub fn entries(&self) -> &[Entry] {
         &self.entries
     }
 
     /// Search entries by query (case-insensitive title/username/url/notes/tags).
-    #[must_use] 
+    #[must_use]
     pub fn search_entries(&self, query: &str) -> Vec<&Entry> {
         self.entries
             .iter()
@@ -556,13 +564,13 @@ impl VaultFile {
     }
 
     /// Number of entries.
-    #[must_use] 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Whether vault has no entries.
-    #[must_use] 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

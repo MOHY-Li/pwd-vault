@@ -5,7 +5,7 @@
 
 use crate::error::{Result, VaultError};
 use argon2::{Algorithm, Argon2, Params, Version};
-use chacha20poly1305::{aead::Aead, KeyInit, XChaCha20Poly1305, XNonce};
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305, XNonce, aead::Aead};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
@@ -20,12 +20,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 pub struct MasterKey([u8; 32]);
 
 impl MasterKey {
-    #[must_use] 
+    #[must_use]
     pub fn new(key: [u8; 32]) -> Self {
         Self(key)
     }
 
-    #[must_use] 
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8; 32] {
         &self.0
     }
@@ -47,7 +47,7 @@ pub struct EncryptedData {
 // ---------------------------------------------------------------------------
 
 /// Generate a cryptographically random 32-byte salt.
-#[must_use] 
+#[must_use]
 pub fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
     getrandom::fill(&mut salt).expect("failed to generate random salt");
@@ -93,7 +93,7 @@ pub fn derive_master_key(
 }
 
 /// Derive a 256-bit authentication hash from the master key (HKDF-SHA256).
-#[must_use] 
+#[must_use]
 pub fn derive_auth_hash(master_key: &MasterKey) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
     let mut out = [0u8; 32];
@@ -103,7 +103,7 @@ pub fn derive_auth_hash(master_key: &MasterKey) -> [u8; 32] {
 }
 
 /// Derive a 256-bit vault encryption key from the master key (HKDF-SHA256).
-#[must_use] 
+#[must_use]
 pub fn derive_vault_key(master_key: &MasterKey) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, master_key.as_bytes());
     let mut out = [0u8; 32];
@@ -114,7 +114,7 @@ pub fn derive_vault_key(master_key: &MasterKey) -> [u8; 32] {
 
 /// Derive a per-entry encryption key from a key seed and entry identifier
 /// (HKDF-SHA256 with `entry_id` as info).
-#[must_use] 
+#[must_use]
 pub fn derive_entry_key(key_seed: &[u8; 32], entry_id: &[u8]) -> [u8; 32] {
     let hkdf: Hkdf<Sha256> = Hkdf::new(None, key_seed);
     let mut out = [0u8; 32];

@@ -2,10 +2,10 @@
 //!
 //! Run with: `cargo bench -p pwd-vault-core`
 
-use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use pwd_vault_core::crypto::{
-    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_master_key,
-    derive_vault_key, encrypt, generate_salt, verify_mac,
+    compute_mac, decrypt, derive_auth_hash, derive_entry_key, derive_master_key, derive_vault_key,
+    encrypt, generate_salt, verify_mac,
 };
 
 fn bench_key_derivation(c: &mut Criterion) {
@@ -17,8 +17,12 @@ fn bench_key_derivation(c: &mut Criterion) {
     });
 
     let master_key = derive_master_key(password, &salt).unwrap();
-    c.bench_function("derive_auth_hash", |b| b.iter(|| derive_auth_hash(&master_key)));
-    c.bench_function("derive_vault_key", |b| b.iter(|| derive_vault_key(&master_key)));
+    c.bench_function("derive_auth_hash", |b| {
+        b.iter(|| derive_auth_hash(&master_key))
+    });
+    c.bench_function("derive_vault_key", |b| {
+        b.iter(|| derive_vault_key(&master_key))
+    });
 }
 
 fn bench_encrypt_decrypt(c: &mut Criterion) {
@@ -43,10 +47,14 @@ fn bench_encrypt_decrypt(c: &mut Criterion) {
 fn bench_mac(c: &mut Criterion) {
     let data = vec![0x42_u8; 4096];
     let mac_key = [0xAB_u8; 32];
-    c.bench_function("compute_mac_4k", |b| b.iter(|| compute_mac(&data, &mac_key)));
+    c.bench_function("compute_mac_4k", |b| {
+        b.iter(|| compute_mac(&data, &mac_key))
+    });
 
     let mac = compute_mac(&data, &mac_key);
-    c.bench_function("verify_mac_4k", |b| b.iter(|| verify_mac(&data, &mac, &mac_key)));
+    c.bench_function("verify_mac_4k", |b| {
+        b.iter(|| verify_mac(&data, &mac, &mac_key))
+    });
 }
 
 fn bench_entry_key(c: &mut Criterion) {

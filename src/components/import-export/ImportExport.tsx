@@ -21,6 +21,7 @@ export default function ImportExport() {
   const [mode, setMode] = createSignal<"import" | "export">("import");
   const [importFormat, setImportFormat] = createSignal("json");
   const [exportFormat, setExportFormat] = createSignal("json");
+  const [excludePasswords, setExcludePasswords] = createSignal(true);
   const [importData, setImportData] = createSignal("");
   const [status, setStatus] = createSignal("");
   const [busy, setBusy] = createSignal(false);
@@ -51,7 +52,7 @@ export default function ImportExport() {
     setBusy(true);
     setStatus("导出中...");
     try {
-      const result = await vaultExport(exportFormat());
+      const result = await vaultExport(exportFormat(), excludePasswords());
       const ext = exportFormat() === "csv" ? "csv" : "json";
       const mime = exportFormat() === "csv" ? "text/csv" : "application/json";
       const blob = new Blob([result], { type: mime });
@@ -194,6 +195,18 @@ export default function ImportExport() {
                     </For>
                   </div>
                 </div>
+                <label class="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-xs text-zinc-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={excludePasswords()}
+                    onChange={(e) => setExcludePasswords(e.currentTarget.checked)}
+                    class="accent-emerald-500"
+                  />
+                  <div>
+                    <div class="font-medium">排除敏感数据</div>
+                    <div class="text-[10px] text-zinc-500">导出时不包含密码、TOTP 密钥和密码历史</div>
+                  </div>
+                </label>
               </div>
             </Show>
 

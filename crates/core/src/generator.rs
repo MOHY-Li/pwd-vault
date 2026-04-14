@@ -36,7 +36,7 @@ impl CharSet {
     ///
     /// Ambiguous characters: `0 O 1 l I | \` '`
     #[allow(clippy::doc_markdown)]
-    #[must_use] 
+    #[must_use]
     pub fn build_charset(&self) -> Vec<char> {
         const AMBIGUOUS: &[char] = &['0', 'O', '1', 'l', 'I', '|', '`', '\''];
 
@@ -53,8 +53,8 @@ impl CharSet {
         }
         if self.special {
             const SPECIAL_CHARS: &[char] = &[
-                '!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':',
-                ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '{', '|', '}', '~',
+                '!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';',
+                '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '{', '|', '}', '~',
             ];
             chars.extend(SPECIAL_CHARS.iter().copied());
         }
@@ -81,15 +81,11 @@ impl CharSet {
     }
 
     /// Shannon entropy per character given the current charset size.
-    #[must_use] 
+    #[must_use]
     pub fn entropy_per_char(&self) -> f64 {
         let charset = self.build_charset();
         let n = charset.len() as f64;
-        if n <= 1.0 {
-            0.0
-        } else {
-            n.log2()
-        }
+        if n <= 1.0 { 0.0 } else { n.log2() }
     }
 }
 
@@ -129,7 +125,9 @@ fn csp_random_bytes(len: usize) -> crate::error::Result<Vec<u8>> {
 /// Uses rejection sampling to avoid modulo bias.
 fn csp_random_index(max: usize) -> crate::error::Result<usize> {
     if max == 0 {
-        return Err(VaultError::Crypto("csp_random_index: max must be > 0".into()));
+        return Err(VaultError::Crypto(
+            "csp_random_index: max must be > 0".into(),
+        ));
     }
     if max == 1 {
         return Ok(0);
@@ -139,9 +137,7 @@ fn csp_random_index(max: usize) -> crate::error::Result<usize> {
     let limit = rand_max - (rand_max % max as u64);
     loop {
         let bytes = csp_random_bytes(8)?;
-        let val = u64::from_ne_bytes(
-            bytes.as_slice().try_into().expect("8 bytes"),
-        );
+        let val = u64::from_ne_bytes(bytes.as_slice().try_into().expect("8 bytes"));
         if val < limit {
             return Ok((val % max as u64) as usize);
         }
@@ -163,7 +159,9 @@ pub fn generate_password(config: &GeneratorConfig) -> crate::error::Result<Strin
 
     let charset = config.charset.build_charset();
     if charset.is_empty() {
-        return Err(VaultError::Crypto("charset is empty after exclusions".into()));
+        return Err(VaultError::Crypto(
+            "charset is empty after exclusions".into(),
+        ));
     }
 
     // Build per-category charsets for the guarantee step.
@@ -202,8 +200,8 @@ pub fn generate_password(config: &GeneratorConfig) -> crate::error::Result<Strin
 
     let sc: Vec<char> = if config.charset.special {
         let mut s = vec![
-            '!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':',
-            ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '{', '|', '}', '~',
+            '!', '"', '#', '$', '%', '&', '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<',
+            '=', '>', '?', '@', '[', '\\', ']', '^', '_', '{', '|', '}', '~',
         ];
         if config.charset.exclude_ambiguous {
             s.retain(|c| !['|', '\'', '`'].contains(c));
@@ -215,10 +213,15 @@ pub fn generate_password(config: &GeneratorConfig) -> crate::error::Result<Strin
     };
 
     // Ensure we have room for at least one char from each enabled category.
-    let required: usize = [!uc.is_empty(), !lc.is_empty(), !dc.is_empty(), !sc.is_empty()]
-        .into_iter()
-        .filter(|&b| b)
-        .count();
+    let required: usize = [
+        !uc.is_empty(),
+        !lc.is_empty(),
+        !dc.is_empty(),
+        !sc.is_empty(),
+    ]
+    .into_iter()
+    .filter(|&b| b)
+    .count();
 
     if config.length < required {
         return Err(VaultError::Crypto(
@@ -257,8 +260,8 @@ pub fn generate_password(config: &GeneratorConfig) -> crate::error::Result<Strin
 // ---------------------------------------------------------------------------
 
 const CONSONANTS: &[char] = &[
-    'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'v', 'w',
-    'x', 'y', 'z',
+    'b', 'c', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'm', 'n', 'p', 'r', 's', 't', 'v', 'w', 'x', 'y',
+    'z',
 ];
 
 const VOWELS: &[char] = &['a', 'e', 'i', 'o', 'u'];
@@ -402,7 +405,10 @@ mod tests {
         // Full default charset (upper + lower + digit + special, ~94 chars before dedup)
         let cs = CharSet::default();
         let entropy = cs.entropy_per_char();
-        assert!(entropy > 6.0, "full charset entropy should be > 6 bits/char, got {entropy}");
+        assert!(
+            entropy > 6.0,
+            "full charset entropy should be > 6 bits/char, got {entropy}"
+        );
 
         // Digits only (10 chars)
         let digits = CharSet {

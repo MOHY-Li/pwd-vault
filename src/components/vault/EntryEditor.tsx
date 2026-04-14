@@ -1,7 +1,7 @@
 import { Show, For, Switch, Match, createSignal, createEffect, JSX } from "solid-js";
 import {
   KeyRound, FileText, CreditCard, UserRound, X, ChevronDown, ChevronRight, Check, Sparkles,
-  Star, Tag, Wrench, PlusCircle, AlertTriangle,
+  Star, Tag, Wrench, PlusCircle, AlertTriangle, Eye, EyeOff,
 } from "lucide-solid";
 import { editingEntry, setEditingEntry, editingIsNew, addEntry, updateEntry, entries } from "../../stores/vault";
 import { generatePassword, evaluateStrength, totpParseUri } from "../../api";
@@ -46,6 +46,12 @@ export default function EntryEditor() {
   const [saveError, setSaveError] = createSignal("");
   // M3: Local TOTP URI input signal
   const [totpInput, setTotpInput] = createSignal("");
+  // F1: Password visibility toggle
+  const [showPassword, setShowPassword] = createSignal(false);
+  // F2: TOTP secret visibility toggle
+  const [showTotpSecret, setShowTotpSecret] = createSignal(false);
+  // F7: Debounce timer for strength evaluation
+  let strengthTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Generator options
   const [genLength, setGenLength] = createSignal(20);
@@ -149,6 +155,8 @@ export default function EntryEditor() {
       setShowCancelConfirm(false);
       setSaveError("");
       setTotpInput("");
+      setShowPassword(false);
+      setShowTotpSecret(false);
       if (src.password) {
         evaluateStrength(src.password)
           .then(r => setStrength(r))
@@ -268,13 +276,16 @@ export default function EntryEditor() {
                   <FieldLabel text="密码" />
                   <div class="flex gap-1.5">
                     <input
-                      type="text"
+                      type={showPassword() ? "text" : "password"}
                       value={entry()?.password ?? ""}
-                      onInput={async (e) => {
+                      onInput={(e) => {
                           const val = e.currentTarget.value;
                           updateField("password", val);
+                          if (strengthTimer) clearTimeout(strengthTimer);
                           if (val) {
-                            try { const r = await evaluateStrength(val); setStrength(r); } catch { setStrength(null); }
+                            strengthTimer = setTimeout(async () => {
+                              try { const r = await evaluateStrength(val); setStrength(r); } catch { setStrength(null); }
+                            }, 300);
                           } else {
                             setStrength(null);
                           }
@@ -282,7 +293,15 @@ export default function EntryEditor() {
                       class="input-field flex-1 !font-mono"
                       placeholder="密码"
                     />
-                    <button onClick={handleGeneratePassword} class="flex items-center justify-center rounded-lg bg-emerald-600 px-2.5 text-white hover:bg-emerald-500">
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword())}
+                      class="flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-zinc-400 hover:text-zinc-200"
+                      aria-label={showPassword() ? "隐藏密码" : "显示密码"}
+                    >
+                      {showPassword() ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button onClick={handleGeneratePassword} class="flex items-center justify-center rounded-lg bg-emerald-600 px-2.5 text-white hover:bg-emerald-500" aria-label="生成密码">
                       <Sparkles size={14} />
                     </button>
                   </div>
@@ -325,19 +344,29 @@ export default function EntryEditor() {
                 </div>
                 <div>
                   <FieldLabel text="TOTP URI" />
-                  <input
-                    type="text"
-                    value={totpInput()}
-                    onInput={async (e) => {
-                      const uri = e.currentTarget.value.trim();
-                      setTotpInput(e.currentTarget.value);
-                      if (uri.startsWith("otpauth://")) {
-                        try { const config = await totpParseUri(uri); const ent = entry(); if (ent) setForm({ ...ent, totp: config }); } catch {}
-                      }
-                    }}
-                    class="input-field !text-[11px]"
-                    placeholder="otpauth://totp/..."
-                  />
+                  <div class="flex gap-1.5">
+                    <input
+                      type={showTotpSecret() ? "text" : "password"}
+                      value={totpInput()}
+                      onInput={async (e) => {
+                        const uri = e.currentTarget.value.trim();
+                        setTotpInput(e.currentTarget.value);
+                        if (uri.startsWith("otpauth://")) {
+                          try { const config = await totpParseUri(uri); const ent = entry(); if (ent) setForm({ ...ent, totp: config }); } catch {}
+                        }
+                      }}
+                      class="input-field flex-1 !text-[11px]"
+                      placeholder="otpauth://totp/..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowTotpSecret(!showTotpSecret())}
+                      class="flex items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 px-2 text-zinc-400 hover:text-zinc-200"
+                      aria-label={showTotpSecret() ? "隐藏密钥" : "显示密钥"}
+                    >
+                      {showTotpSecret() ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
                   <Show when={entry()?.totp}>
                     <div class="flex items-center justify-between mt-1">
                       <span class="flex items-center gap-1 text-[10px] text-emerald-400"><Check size={10} /> TOTP 已配置</span>

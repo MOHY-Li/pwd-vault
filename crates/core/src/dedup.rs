@@ -39,7 +39,7 @@ pub struct DedupEngine;
 impl DedupEngine {
     /// Check a list of imported entries against existing vault entries.
     /// Returns a `DedupEntry` for each imported entry with its status.
-    #[must_use] 
+    #[must_use]
     pub fn check(incoming: &[Entry], existing: &[Entry]) -> Vec<DedupEntry> {
         incoming
             .iter()
@@ -76,7 +76,11 @@ impl DedupEngine {
             let ex_url = normalize_url(&ex.url);
             let ex_user = ex.username.trim().to_lowercase();
 
-            if entry_url == ex_url && !entry_url.is_empty() && entry_user == ex_user && !entry_user.is_empty() {
+            if entry_url == ex_url
+                && !entry_url.is_empty()
+                && entry_user == ex_user
+                && !entry_user.is_empty()
+            {
                 return DedupStatus::Duplicate(i);
             }
         }
@@ -113,7 +117,7 @@ impl DedupEngine {
     }
 
     /// Filter incoming entries to only those that are new (no duplicates).
-    #[must_use] 
+    #[must_use]
     pub fn filter_new(incoming: &[Entry], existing: &[Entry]) -> Vec<Entry> {
         Self::check(incoming, existing)
             .into_iter()
@@ -123,7 +127,7 @@ impl DedupEngine {
     }
 
     /// Count duplicates and conflicts.
-    #[must_use] 
+    #[must_use]
     pub fn count_issues(incoming: &[Entry], existing: &[Entry]) -> (usize, usize) {
         let report = Self::check(incoming, existing);
         let dupes = report

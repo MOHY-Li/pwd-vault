@@ -44,7 +44,7 @@ pub struct AuditLog {
 
 impl AuditLog {
     /// Create a new, empty audit log with the default capacity of 500 entries.
-    #[must_use] 
+    #[must_use]
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -65,14 +65,14 @@ impl AuditLog {
     }
 
     /// Return a slice of the last `count` entries (or fewer if not enough).
-    #[must_use] 
+    #[must_use]
     pub fn recent(&self, count: usize) -> &[AuditEntry] {
         let start = self.entries.len().saturating_sub(count);
         &self.entries[start..]
     }
 
     /// Return a slice of all entries.
-    #[must_use] 
+    #[must_use]
     pub fn all(&self) -> &[AuditEntry] {
         &self.entries
     }
@@ -133,8 +133,14 @@ mod tests {
 
         let recent = log.recent(2);
         assert_eq!(recent.len(), 2);
-        assert!(matches!(recent[0].event_type, AuditEventType::EntryCreated { .. }));
-        assert!(matches!(recent[1].event_type, AuditEventType::EntryViewed { .. }));
+        assert!(matches!(
+            recent[0].event_type,
+            AuditEventType::EntryCreated { .. }
+        ));
+        assert!(matches!(
+            recent[1].event_type,
+            AuditEventType::EntryViewed { .. }
+        ));
     }
 
     #[test]
@@ -171,7 +177,13 @@ mod tests {
 
         let loaded = AuditLog::load_from_file(&path).unwrap();
         assert_eq!(loaded.all().len(), 2);
-        assert!(matches!(loaded.all()[0].event_type, AuditEventType::VaultCreated));
-        assert!(matches!(loaded.all()[1].event_type, AuditEventType::DataImported { count: 42 }));
+        assert!(matches!(
+            loaded.all()[0].event_type,
+            AuditEventType::VaultCreated
+        ));
+        assert!(matches!(
+            loaded.all()[1].event_type,
+            AuditEventType::DataImported { count: 42 }
+        ));
     }
 }

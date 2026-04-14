@@ -18,6 +18,25 @@ pub struct VaultPath(pub Mutex<Option<PathBuf>>);
 pub struct AuditState(pub Mutex<AuditLog>);
 
 // ---------------------------------------------------------------------------
+// Helper: audit log path alongside vault file
+// ---------------------------------------------------------------------------
+
+/// Derive the audit log path from the vault file path: `<vault>.audit`
+fn audit_path_for_vault(vault_path: &std::path::Path) -> std::path::PathBuf {
+    let mut p = vault_path.to_path_buf();
+    p.set_extension("vault.audit");
+    p
+}
+
+/// Persist the audit log to disk (best-effort, errors are logged to stderr).
+fn persist_audit(log: &AuditLog, vault_path: &std::path::Path) {
+    let audit_path = audit_path_for_vault(vault_path);
+    if let Err(e) = log.save_to_file(&audit_path) {
+        eprintln!("warning: failed to persist audit log: {e}");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Helper: get mutable vault reference or error
 // ---------------------------------------------------------------------------
 
@@ -51,10 +70,20 @@ pub fn vault_create(
     let file_path = PathBuf::from(&path);
     vault.save(&file_path).map_err(|e| e.to_string())?;
 
-    *vault_state.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(vault);
-    *vault_path.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(file_path);
+    *vault_state
+        .0
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))? = Some(vault);
+    *vault_path
+        .0
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))? = Some(file_path);
 
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(AuditEventType::VaultCreated);
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::VaultCreated);
     Ok(())
 }
 
@@ -69,10 +98,28 @@ pub fn vault_open(
     let file_path = PathBuf::from(&path);
     let vault = VaultFile::open(&master_password, &file_path).map_err(|e| e.to_string())?;
 
-    *vault_state.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(vault);
-    *vault_path.0.lock().map_err(|e| format!("lock error: {e}"))? = Some(file_path);
+    *vault_state
+        .0
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))? = Some(vault);
+    *vault_path
+        .0
+        .lock()
+        .map_err(|e| format!("lock error: {e}"))? = Some(file_path.clone());
 
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(AuditEventType::VaultOpened);
+    // R1: Load persisted audit log if it exists
+    let audit_path = audit_path_for_vault(&file_path);
+    if audit_path.exists() {
+        if let Ok(loaded) = AuditLog::load_from_file(&audit_path) {
+            *audit_state.0.lock().map_err(|e| e.to_string())? = loaded;
+        }
+    }
+
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::VaultOpened);
     Ok(())
 }
 
@@ -80,6 +127,7 @@ pub fn vault_open(
 pub fn vault_save(
     vault_state: State<'_, VaultState>,
     vault_path: State<'_, VaultPath>,
+    audit_state: State<'_, AuditState>,
 ) -> Result<(), String> {
     // Acquire VaultState lock BEFORE VaultPath lock (consistent ordering).
     let mut vault_guard = get_vault(&vault_state)?;
@@ -94,7 +142,15 @@ pub fn vault_save(
             .ok_or_else(|| "no vault path stored; open or create a vault first".to_string())?
     };
 
-    vault.save(&file_path).map_err(|e| e.to_string())
+    vault.save(&file_path).map_err(|e| e.to_string())?;
+
+    // R1: Persist audit log alongside vault file
+    {
+        let log = audit_state.0.lock().map_err(|e| e.to_string())?;
+        persist_audit(&log, &file_path);
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -104,7 +160,11 @@ pub fn vault_lock(
 ) -> Result<(), String> {
     let mut guard = get_vault(&vault_state)?;
     *guard = None;
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(AuditEventType::VaultLocked);
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::VaultLocked);
     Ok(())
 }
 
@@ -138,9 +198,13 @@ pub fn entry_add(
     let id = entry.id.clone();
     vault.add_entry(entry);
 
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(
-        AuditEventType::EntryCreated { entry_id: id.clone() },
-    );
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::EntryCreated {
+            entry_id: id.clone(),
+        });
     Ok(id)
 }
 
@@ -160,9 +224,11 @@ pub fn entry_update(
         .ok_or_else(|| "no vault is open".to_string())?;
 
     vault.update_entry(entry).map_err(|e| e.to_string())?;
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(
-        AuditEventType::EntryUpdated { entry_id: id },
-    );
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::EntryUpdated { entry_id: id });
     Ok(())
 }
 
@@ -178,9 +244,11 @@ pub fn entry_delete(
         .ok_or_else(|| "no vault is open".to_string())?;
 
     if vault.delete_entry(&id) {
-        audit_state.0.lock().map_err(|e| e.to_string())?.log(
-            AuditEventType::EntryDeleted { entry_id: id },
-        );
+        audit_state
+            .0
+            .lock()
+            .map_err(|e| e.to_string())?
+            .log(AuditEventType::EntryDeleted { entry_id: id });
         Ok(())
     } else {
         Err(format!("entry not found: {id}"))
@@ -188,10 +256,7 @@ pub fn entry_delete(
 }
 
 #[tauri::command]
-pub fn entry_get(
-    id: String,
-    vault_state: State<'_, VaultState>,
-) -> Result<Option<String>, String> {
+pub fn entry_get(id: String, vault_state: State<'_, VaultState>) -> Result<Option<String>, String> {
     let guard = get_vault(&vault_state)?;
     let vault = guard
         .as_ref()
@@ -216,10 +281,7 @@ pub fn entry_list(vault_state: State<'_, VaultState>) -> Result<String, String> 
 }
 
 #[tauri::command]
-pub fn entry_search(
-    query: String,
-    vault_state: State<'_, VaultState>,
-) -> Result<String, String> {
+pub fn entry_search(query: String, vault_state: State<'_, VaultState>) -> Result<String, String> {
     let guard = get_vault(&vault_state)?;
     let vault = guard
         .as_ref()
@@ -289,7 +351,10 @@ pub fn evaluate_strength(password: String) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub fn totp_generate(entry_id: String, vault_state: State<'_, VaultState>) -> Result<String, String> {
+pub fn totp_generate(
+    entry_id: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<String, String> {
     let guard = get_vault(&vault_state)?;
     let vault = guard
         .as_ref()
@@ -309,7 +374,10 @@ pub fn totp_generate(entry_id: String, vault_state: State<'_, VaultState>) -> Re
 }
 
 #[tauri::command]
-pub fn totp_time_remaining(entry_id: String, vault_state: State<'_, VaultState>) -> Result<u32, String> {
+pub fn totp_time_remaining(
+    entry_id: String,
+    vault_state: State<'_, VaultState>,
+) -> Result<u32, String> {
     let guard = get_vault(&vault_state)?;
     let vault = guard
         .as_ref()
@@ -354,8 +422,8 @@ pub fn vault_import(
         other => return Err(format!("unknown import format: {other}")),
     };
 
-    let entries = import_export::import_entries(&import_format, &data)
-        .map_err(|e| e.to_string())?;
+    let entries =
+        import_export::import_entries(&import_format, &data).map_err(|e| e.to_string())?;
 
     let count = entries.len();
     let mut guard = get_vault(&vault_state)?;
@@ -363,13 +431,17 @@ pub fn vault_import(
         .as_mut()
         .ok_or_else(|| "no vault is open".to_string())?;
 
-    for entry in entries {
+    for mut entry in entries {
+        // R4: Assign new UUID to prevent overwriting existing entries
+        entry.id = uuid::Uuid::new_v4().to_string();
         vault.add_entry(entry);
     }
 
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(
-        AuditEventType::DataImported { count },
-    );
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::DataImported { count });
 
     Ok(format!("{count}"))
 }
@@ -377,6 +449,7 @@ pub fn vault_import(
 #[tauri::command]
 pub fn vault_export(
     format: String,
+    exclude_passwords: bool,
     vault_state: State<'_, VaultState>,
     audit_state: State<'_, AuditState>,
 ) -> Result<String, String> {
@@ -392,18 +465,19 @@ pub fn vault_export(
         .as_ref()
         .ok_or_else(|| "no vault is open".to_string())?;
 
-    let result = import_export::export_entries(vault.entries(), &export_format)
+    let result = import_export::export_entries(vault.entries(), &export_format, exclude_passwords)
         .map_err(|e| e.to_string())?;
 
-    audit_state.0.lock().map_err(|e| e.to_string())?.log(AuditEventType::DataExported);
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::DataExported);
     Ok(result)
 }
 
 #[tauri::command]
-pub fn detect_import_format(
-    data: String,
-    filename: Option<String>,
-) -> Result<String, String> {
+pub fn detect_import_format(data: String, filename: Option<String>) -> Result<String, String> {
     let format = import_export::detect_format(&data, filename.as_deref());
     let name = match format {
         ImportFormat::Json => "json",

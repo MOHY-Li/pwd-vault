@@ -58,9 +58,10 @@ export default function AuditLog() {
     return new Date(ts).toLocaleString("zh-CN");
   }
 
-  // M4: Move loadEntries to createEffect that watches showAuditLog
+  // F4: Reload entries every time the modal opens
   createEffect(() => {
-    if (showAuditLog() && !loaded()) {
+    if (showAuditLog()) {
+      setLoaded(false);
       loadEntries();
     }
   });

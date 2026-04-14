@@ -17,6 +17,7 @@ export async function createVault(password: string, path: string) {
   await api.vaultCreate(password, path);
   setVaultPath(path);
   setIsUnlocked(true);
+  await refreshEntries();
 }
 
 export async function unlockVault(password: string, path: string) {
