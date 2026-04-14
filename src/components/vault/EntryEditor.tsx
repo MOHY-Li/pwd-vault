@@ -421,29 +421,32 @@ export default function EntryEditor() {
                   <div>
                     <FieldLabel text="电话" />
                     <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "电话"); return f ? f.value : ""; })()} onInput={(e) => {
+                      let raw = e.currentTarget.value.replace(/[^\d\s\-+()]/g, "").slice(0, 15);
                       const fields = [...(entry()?.custom_fields ?? [])];
                       const idx = fields.findIndex((c: CustomField) => c.name === "电话");
-                      if (idx >= 0) fields[idx] = { ...fields[idx], value: e.currentTarget.value };
-                      else fields.push({ name: "电话", value: e.currentTarget.value, field_type: "text" });
+                      if (idx >= 0) fields[idx] = { ...fields[idx], value: raw };
+                      else fields.push({ name: "电话", value: raw, field_type: "text" });
                       updateField("custom_fields", fields);
-                    }} class="input-field" placeholder="138 0000 0000" />
+                    }} class="input-field !font-mono" placeholder="138 0000 0000" />
                   </div>
                 </div>
                 {/* Dynamic custom fields (exclude 邮箱/电话) */}
-                <For each={entry()?.custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: CustomField) => (
+                <For each={entry()?.custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: CustomField) => {
+                  const fieldName = f.name;
+                  return (
                     <div class="flex items-end gap-1.5">
                       <div class="flex-1">
-                        <FieldLabel text={f.name} />
-                        <input type="text" value={f.value} onInput={(e) => {
+                        <FieldLabel text={fieldName} />
+                        <input type="text" value={entry()?.custom_fields?.find((c: CustomField) => c.name === fieldName)?.value ?? ""} onInput={(e) => {
                           const fields = [...(entry()?.custom_fields ?? [])];
-                          const idx = fields.findIndex((c: CustomField) => c.name === f.name);
+                          const idx = fields.findIndex((c: CustomField) => c.name === fieldName);
                           if (idx >= 0) { fields[idx] = { ...fields[idx], value: e.currentTarget.value }; updateField("custom_fields", fields); }
                         }} class="input-field" />
                       </div>
                       <button
                         type="button"
                         onClick={() => {
-                          const fields = (entry()?.custom_fields ?? []).filter((c: CustomField) => c.name !== f.name);
+                          const fields = (entry()?.custom_fields ?? []).filter((c: CustomField) => c.name !== fieldName);
                           updateField("custom_fields", fields);
                         }}
                         class="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-colors"
@@ -451,7 +454,8 @@ export default function EntryEditor() {
                         <X size={13} />
                       </button>
                     </div>
-                )}</For>
+                  );
+                }}</For>
                 <Show when={addingField()}>
                   <div class="flex items-end gap-1.5">
                     <div class="flex-1">
