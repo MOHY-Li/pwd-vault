@@ -27,7 +27,7 @@ subtle = "2"
 base64 = "0.22"
 
 # macOS Keychain
-security-framework = "3"
+# security-framework = "3"
 
 # TOTP
 totp-rs = { version = "5", features = ["serde_support", "otpauth"] }

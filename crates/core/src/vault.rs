@@ -377,6 +377,10 @@ impl VaultFile {
 
         // Atomic write: write to temp file then rename
         let tmp_path = path.with_extension("vault.tmp");
+        // Ensure parent directory exists
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         {
             let mut f = std::fs::File::create(&tmp_path)?;
             f.write_all(&buf)?;

@@ -1,9 +1,8 @@
 import { createSignal, Show, onMount } from "solid-js";
-import { Shield, AlertTriangle, Fingerprint } from "lucide-solid";
+import { Shield, AlertTriangle } from "lucide-solid";
 import { createVault, unlockVault } from "../../stores/vault";
 import { appDataDir } from "@tauri-apps/api/path";
 import { exists } from "@tauri-apps/plugin-fs";
-import { biometricStorePassword, biometricRetrievePassword, biometricIsEnabled } from "../../api";
 
 export default function LockScreen() {
   const [password, setPassword] = createSignal("");
@@ -12,27 +11,17 @@ export default function LockScreen() {
   const [error, setError] = createSignal("");
   const [loading, setLoading] = createSignal(false);
   const [defaultPath, setDefaultPath] = createSignal("");
-  // M5: Track whether a vault file already exists
   const [vaultFileExists, setVaultFileExists] = createSignal(false);
-  const [showCreateWarning, setShowCreateWarning] = createSignal(false);
-  // Touch ID state
-  const [biometricAvailable, setBiometricAvailable] = createSignal(false);
-  const [biometricLoading, setBiometricLoading] = createSignal(false);
 
   onMount(async () => {
     const dir = await appDataDir();
-    const vaultPath = dir + "my.vault";
+    // Normalize: appDataDir returns .../com.mohyli.pwdvault on macOS, not .../com.mohyli.pwdvault/
+    const normalizedDir = dir.endsWith('/') ? dir.slice(0, -1) : dir;
+    const vaultPath = normalizedDir + "/my.vault";
     setDefaultPath(vaultPath);
     const fileExists = await exists(vaultPath);
     setVaultFileExists(fileExists);
     setIsSetup(!fileExists);
-    // Check if Touch ID is enabled
-    try {
-      const enabled = await biometricIsEnabled();
-      setBiometricAvailable(enabled);
-    } catch {
-      setBiometricAvailable(false);
-    }
   });
 
   async function handleSubmit(e: Event) {
@@ -50,8 +39,8 @@ export default function LockScreen() {
         setError("两次密码不一致");
         return;
       }
-      if (pwd.length < 8) {
-        setError("主密码至少需要8个字符");
+      if (pwd.length < 7) {
+        setError("主密码至少需要7个字符");
         return;
       }
     }
@@ -60,56 +49,15 @@ export default function LockScreen() {
     try {
       if (isSetup()) {
         await createVault(pwd, defaultPath());
-        // After creating vault, ask about Touch ID
-        const enableBiometric = window.confirm("密码库创建成功！是否启用 Touch ID 解锁？\n\n启用后下次解锁只需验证指纹，无需输入密码。");
-        if (enableBiometric) {
-          await biometricStorePassword(pwd);
-          setBiometricAvailable(true);
-        }
       } else {
         await unlockVault(pwd, defaultPath());
       }
-      // F6: Clear passwords from memory after successful operation
       setPassword("");
       setConfirmPassword("");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleBiometric() {
-    setError("");
-    setBiometricLoading(true);
-    try {
-      const pwd = await biometricRetrievePassword();
-      await unlockVault(pwd, defaultPath());
-      setPassword("");
-      setConfirmPassword("");
-    } catch (err: unknown) {
-      setError("Touch ID 验证失败，请使用主密码解锁");
-    } finally {
-      setBiometricLoading(false);
-    }
-  }
-
-  /** H1: Handle clicking the "Create" tab when a vault already exists */
-  function handleCreateTabClick() {
-    if (vaultFileExists()) {
-      // If warning is already showing, user confirms → switch to create mode
-      if (showCreateWarning()) {
-        setShowCreateWarning(false);
-        setIsSetup(true);
-      } else if (!isSetup()) {
-        // First click when vault exists and we're in unlock mode → show warning
-        setShowCreateWarning(true);
-      } else {
-        // Already in setup mode (no prior warning needed), just stay
-        setIsSetup(true);
-      }
-    } else {
-      setIsSetup(true);
     }
   }
 
@@ -135,7 +83,7 @@ export default function LockScreen() {
                   ? "text-zinc-500 hover:text-zinc-300"
                   : "text-zinc-400 hover:text-zinc-200"
             }`}
-            onClick={handleCreateTabClick}
+            onClick={() => setIsSetup(true)}
           >
             创建新库
           </button>
@@ -145,19 +93,18 @@ export default function LockScreen() {
                 ? "bg-emerald-600 text-white"
                 : "text-zinc-400 hover:text-zinc-200"
             }`}
-            onClick={() => { setIsSetup(false); setShowCreateWarning(false); }}
+            onClick={() => setIsSetup(false)}
           >
             解锁已有库
           </button>
         </div>
 
-        {/* H1: Warning when vault exists and user tries to create */}
-        <Show when={showCreateWarning()}>
+        {/* Warning when vault exists and user is on create tab */}
+        <Show when={vaultFileExists() && isSetup()}>
           <div class="mb-4 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
             <AlertTriangle size={16} class="text-amber-400 mt-0.5 flex-shrink-0" />
             <div class="text-xs text-amber-300">
-              检测到已有密码库文件。创建新库将<strong>覆盖</strong>现有数据。
-              再次点击「创建新库」标签确认，或点击「解锁已有库」解锁现有密码库。
+              检测到已有密码库，创建新库将覆盖现有数据库。
             </div>
           </div>
         </Show>
@@ -202,18 +149,6 @@ export default function LockScreen() {
           >
             {loading() ? "处理中..." : isSetup() ? "创建密码库" : "解锁"}
           </button>
-
-          <Show when={!isSetup() && biometricAvailable()}>
-            <button
-              type="button"
-              disabled={biometricLoading()}
-              onClick={handleBiometric}
-              class="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
-            >
-              <Fingerprint size={18} />
-              {biometricLoading() ? "验证中..." : "使用 Touch ID 解锁"}
-            </button>
-          </Show>
         </form>
       </div>
     </div>

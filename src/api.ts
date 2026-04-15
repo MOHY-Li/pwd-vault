@@ -228,22 +228,3 @@ export async function auditRecent(count: number): Promise<AuditEntry[]> {
   return JSON.parse(raw);
 }
 
-// --------------------------------------------------------------------------
-// Biometric (Touch ID)
-// --------------------------------------------------------------------------
-
-export async function biometricStorePassword(password: string): Promise<void> {
-  await invoke("biometric_store_password", { password });
-}
-
-export async function biometricRetrievePassword(): Promise<string> {
-  return await invoke<string>("biometric_retrieve_password");
-}
-
-export async function biometricDeletePassword(): Promise<void> {
-  await invoke("biometric_delete_password");
-}
-
-export async function biometricIsEnabled(): Promise<boolean> {
-  return await invoke<boolean>("biometric_is_enabled");
-}
