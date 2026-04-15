@@ -1,4 +1,4 @@
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, createEffect } from "solid-js";
 import { trash, showTrash, setShowTrash, refreshTrash, restoreEntry, purgeEntry, emptyTrash } from "../../stores/vault";
 import type { Entry } from "../../api";
 import { KeyRound, FileText, CreditCard, UserRound, Trash2, X, Recycle } from "lucide-solid";
@@ -27,6 +27,13 @@ export default function Trash() {
   const [confirmPurgeId, setConfirmPurgeId] = createSignal<string | null>(null);
   const [confirmEmpty, setConfirmEmpty] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
+
+  // Refresh trash list when modal opens
+  createEffect(() => {
+    if (showTrash()) {
+      refreshTrash();
+    }
+  });
 
   async function handleRestore(id: string) {
     setBusy(true);
