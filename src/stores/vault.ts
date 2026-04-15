@@ -107,10 +107,18 @@ export async function updateEntry(entry: Entry) {
 }
 
 export async function deleteEntry(id: string) {
-  await api.entryDelete(id);
-  await saveVault();
-  await refreshEntries();
-  await refreshTrash();
+  // Clear UI state immediately before async
+  if (selectedEntryId() === id) {
+    setSelectedEntryId(null);
+  }
+  try {
+    await api.entryDelete(id);
+    await saveVault();
+    await refreshEntries();
+    await refreshTrash();
+  } catch (err) {
+    console.error("[deleteEntry] failed:", err);
+  }
 }
 
 // ---------------------------------------------------------------------------

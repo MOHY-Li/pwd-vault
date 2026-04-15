@@ -83,7 +83,11 @@ export default function MainContent() {
                   <span class="text-xs text-red-400"><AlertTriangle size={13} class="inline mr-1" /> 确定删除？</span>
                   <div class="flex gap-2">
                     <button
-                      onClick={async () => { await deleteEntry(entry().id); setPendingDelete(false); }}
+                      onClick={() => {
+                        const id = entry().id;
+                        setPendingDelete(false);
+                        deleteEntry(id).catch(err => console.error("删除失败:", err));
+                      }}
                       class="rounded-md bg-red-600 px-2.5 py-1 text-xs text-white hover:bg-red-500"
                     >
                       删除

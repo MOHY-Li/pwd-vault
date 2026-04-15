@@ -65,6 +65,9 @@ export default function Trash() {
 
   return (
     <Show when={showTrash()}>
+      {(_v) => {
+        console.log("[Trash] rendering, trash.length:", trash.length);
+        return (
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
           {/* Header */}
@@ -101,7 +104,7 @@ export default function Trash() {
                       <div class="flex items-start gap-3">
                         {/* Icon */}
                         <span class="mt-0.5 text-lg text-zinc-400">
-                          {(() => { const Icon = typeIcon[entry.entry_type]; return <Icon size={18} />; })()}
+                          {(() => { const Icon = typeIcon[entry.entry_type as keyof typeof typeIcon]; return Icon ? <Icon size={18} /> : <Trash2 size={18} />; })()}
                         </span>
 
                         {/* Info */}
@@ -158,7 +161,8 @@ export default function Trash() {
                         </div>
                       </div>
                     </div>
-                  )}
+                  );
+                  }}
                 </For>
               </div>
             </Show>
@@ -200,6 +204,7 @@ export default function Trash() {
           </Show>
         </div>
       </div>
+      );}}
     </Show>
   );
 }
