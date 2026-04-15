@@ -1,7 +1,7 @@
 {
   "productName": "Pwd-Vault",
-  "version": "0.1.0",
-  "identifier": "com.pwd-vault.app",
+  "version": "0.2.0",
+  "identifier": "com.mohyli.pwdvault",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
