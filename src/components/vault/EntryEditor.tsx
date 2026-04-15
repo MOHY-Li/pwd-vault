@@ -52,6 +52,11 @@ export default function EntryEditor() {
   const [showTotpSecret, setShowTotpSecret] = createSignal(false);
   // F7: Debounce timer for strength evaluation
   let strengthTimer: ReturnType<typeof setTimeout> | null = null;
+  // New field name input
+  const [newFieldName, setNewFieldName] = createSignal("");
+  const [fieldNameError, setFieldNameError] = createSignal("");
+  // Local cache for dynamic custom field values — prevents <For> DOM rebuild on each keystroke
+  const [localFieldValues, setLocalFieldValues] = createSignal<Record<string, string>>({});
 
   // Generator options
   const [genLength, setGenLength] = createSignal(20);
@@ -76,6 +81,12 @@ export default function EntryEditor() {
     const src = editingEntry();
     const f = form();
     if (!src || !f) return false;
+    // For new entries: only ignore entry_type change (switching tabs), real edits still count
+    if (editingIsNew()) {
+      const { entry_type: _et1, ...restForm } = f;
+      const { entry_type: _et2, ...restSrc } = src;
+      return JSON.stringify(restForm) !== JSON.stringify(restSrc);
+    }
     return JSON.stringify(src) !== JSON.stringify(f);
   }
 
@@ -122,6 +133,13 @@ export default function EntryEditor() {
     try {
       // Clone to avoid corrupting form state on save failure
       e = { ...e };
+      // Sync local field values into form before saving
+      const locals = localFieldValues();
+      if (e.custom_fields && Object.keys(locals).length > 0) {
+        e.custom_fields = e.custom_fields.map(f =>
+          locals[f.name] !== undefined ? { ...f, value: locals[f.name] } : f
+        );
+      }
       // Password history: save old password if changed
       if (!editingIsNew()) {
         const original = editingEntry();
@@ -157,6 +175,11 @@ export default function EntryEditor() {
       setTotpInput("");
       setShowPassword(false);
       setShowTotpSecret(false);
+      setAddingField(false);
+      setNewFieldName("");
+      const init: Record<string, string> = {};
+      for (const f of src.custom_fields ?? []) { init[f.name] = f.value; }
+      setLocalFieldValues(init);
       if (src.password) {
         evaluateStrength(src.password)
           .then(r => setStrength(r))
@@ -180,7 +203,21 @@ export default function EntryEditor() {
           </div>
 
           {/* Body */}
-          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div class="flex-1 overflow-y-auto px-5 py-4 space-y-4" tabindex={-1} onKeyDown={(e) => {
+            if (e.key === "Enter" && e.target instanceof HTMLInputElement && (e.target as HTMLInputElement).type !== "range" && (e.target as HTMLInputElement).type !== "checkbox") {
+              e.preventDefault();
+              const container = e.currentTarget as HTMLElement;
+              const inputs = Array.from(container.querySelectorAll<HTMLElement>('input:not([type="range"]):not([type="checkbox"]), textarea'))
+                .filter(el => (el as HTMLElement).offsetParent !== null);
+              const idx = inputs.indexOf(e.target as HTMLElement);
+              if (idx >= 0 && idx < inputs.length - 1) {
+                inputs[idx + 1].focus();
+              } else {
+                (e.target as HTMLElement).blur();
+                container.focus();
+              }
+            }
+          }}>
             {/* Type selector */}
             <div class="flex justify-center gap-2">
               <For each={ENTRY_TYPES}>
@@ -450,33 +487,48 @@ export default function EntryEditor() {
                   <div>
                     <FieldLabel text="电话" />
                     <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "电话"); return f ? f.value : ""; })()} onInput={(e) => {
-                      let raw = e.currentTarget.value.replace(/[^\d\s\-+()]/g, "").slice(0, 15);
+                      let raw = e.currentTarget.value.replace(/[^\d]/g, "").slice(0, 11);
                       const fields = [...(entry()?.custom_fields ?? [])];
                       const idx = fields.findIndex((c: CustomField) => c.name === "电话");
                       if (idx >= 0) fields[idx] = { ...fields[idx], value: raw };
                       else fields.push({ name: "电话", value: raw, field_type: "text" });
                       updateField("custom_fields", fields);
-                    }} class="input-field !font-mono" placeholder="138 0000 0000" />
+                    }} class="input-field !font-mono" placeholder="13800000000" />
                   </div>
                 </div>
-                {/* Dynamic custom fields (exclude 邮箱/电话) */}
-                <For each={entry()?.custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(f: CustomField) => {
-                  const fieldName = f.name;
+                {/* Dynamic custom fields (exclude 邮箱/电话) — local cache prevents focus loss */}
+                <For each={entry()?.custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话") ?? []}>{(item) => {
+                  const fieldName = item.name;
                   return (
                     <div class="flex items-end gap-1.5">
                       <div class="flex-1">
                         <FieldLabel text={fieldName} />
-                        <input type="text" value={entry()?.custom_fields?.find((c: CustomField) => c.name === fieldName)?.value ?? ""} onInput={(e) => {
-                          const fields = [...(entry()?.custom_fields ?? [])];
-                          const idx = fields.findIndex((c: CustomField) => c.name === fieldName);
-                          if (idx >= 0) { fields[idx] = { ...fields[idx], value: e.currentTarget.value }; updateField("custom_fields", fields); }
-                        }} class="input-field" />
+                        <input type="text"
+                          value={localFieldValues()[fieldName] ?? item.value}
+                          onInput={(e) => {
+                            const val = e.currentTarget.value;
+                            setLocalFieldValues(prev => ({ ...prev, [fieldName]: val }));
+                          }}
+                          onBlur={() => {
+                            const val = localFieldValues()[fieldName] ?? "";
+                            // Only sync to form if value actually changed
+                            const current = entry()?.custom_fields?.find((c: CustomField) => c.name === fieldName);
+                            if (current && current.value !== val) {
+                              const fields = [...(entry()?.custom_fields ?? [])];
+                              const idx = fields.findIndex((c: CustomField) => c.name === fieldName);
+                              if (idx >= 0) { fields[idx] = { ...fields[idx], value: val }; updateField("custom_fields", fields); }
+                            }
+                          }}
+                          class="input-field"
+                          placeholder={`输入${fieldName}的值`}
+                        />
                       </div>
                       <button
                         type="button"
                         onClick={() => {
                           const fields = (entry()?.custom_fields ?? []).filter((c: CustomField) => c.name !== fieldName);
                           updateField("custom_fields", fields);
+                          setLocalFieldValues(prev => { const next = { ...prev }; delete next[fieldName]; return next; });
                         }}
                         class="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-500 hover:text-red-400 hover:border-red-500/40 transition-colors"
                       >
@@ -485,41 +537,61 @@ export default function EntryEditor() {
                     </div>
                   );
                 }}</For>
-                <Show when={addingField()}>
-                  <div class="flex items-end gap-1.5">
-                    <div class="flex-1">
-                      <FieldLabel text="字段名称" />
+                <div style={{ display: addingField() ? "flex" : "none" }} class="items-end gap-1.5">
+                  <div class="flex-1">
+                    <FieldLabel text="字段名称" />
+                    <div class="flex items-center gap-1.5">
                       <input
-                        ref={(el) => setTimeout(() => el.focus(), 50)}
+                        ref={(el) => { if (addingField()) setTimeout(() => el.focus(), 50); }}
                         type="text"
+                        value={newFieldName()}
+                        onInput={(e) => setNewFieldName(e.currentTarget.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            const name = e.currentTarget.value.trim();
-                            if (name) {
-                              const fields = [...(entry()?.custom_fields ?? [])];
-                              if (!fields.some((c: CustomField) => c.name === name)) {
-                                fields.push({ name, value: "", field_type: "text" });
-                                updateField("custom_fields", fields);
-                              }
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          const name = newFieldName().trim();
+                          if (!name) {
+                            setFieldNameError("字段名不能为空");
+                          } else {
+                            const fields = [...(entry()?.custom_fields ?? [])];
+                            const reserved = ["姓名", "公司", "邮箱", "电话"];
+                            if (reserved.includes(name)) {
+                              setFieldNameError("不能使用保留字段名");
+                            } else if (fields.some((c: CustomField) => c.name === name)) {
+                              setFieldNameError("字段名已存在");
+                            } else {
+                              fields.push({ name, value: "", field_type: "text" });
+                              updateField("custom_fields", fields);
+                              setLocalFieldValues(prev => ({ ...prev, [name]: "" }));
+                              setFieldNameError("");
+                              setNewFieldName("");
+                              setAddingField(false);
                             }
-                            setAddingField(false);
-                          } else if (e.key === "Escape") {
-                            setAddingField(false);
                           }
-                        }}
-                        class="input-field"
-                        placeholder="输入名称后按回车"
-                      />
-                    </div>
+                        } else if (e.key === "Escape") {
+                          setNewFieldName("");
+                          setFieldNameError("");
+                          setAddingField(false);
+                        } else {
+                          setFieldNameError("");
+                        }
+                      }}
+                      class={`input-field${fieldNameError() ? " !border-red-500/60" : ""}`}
+                      placeholder="输入名称后按回车"
+                    />
                     <button
                       type="button"
-                      onClick={() => setAddingField(false)}
-                      class="flex h-[30px] w-[30px] items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
+                      onClick={() => { setNewFieldName(""); setFieldNameError(""); setAddingField(false); }}
+                      class="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-500 hover:text-zinc-300 transition-colors"
                     >
                       <X size={13} />
                     </button>
+                    </div>
+                    <Show when={fieldNameError()}>
+                      <p class="mt-1 text-[10px] text-red-400">{fieldNameError()}</p>
+                    </Show>
                   </div>
-                </Show>
+                </div>
                 <Show when={!addingField()}>
                   <button
                     type="button"

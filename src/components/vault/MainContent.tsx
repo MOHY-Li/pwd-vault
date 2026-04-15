@@ -218,12 +218,6 @@ export default function MainContent() {
                         copied={copied() === "phone"}
                       />
                     </div>
-                    <SectionTitle icon={<FileText size={13} />} title="备注" />
-                    <div class="rounded-lg border border-zinc-800 bg-zinc-800/40 p-3">
-                      <div class="whitespace-pre-wrap text-xs text-zinc-400 leading-relaxed">
-                        {entry().notes || "无备注内容"}
-                      </div>
-                    </div>
                     <Show when={entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话").length > 0}>
                       <SectionTitle icon={<PlusCircle size={13} />} title="自定义字段" />
                       <div class="grid grid-cols-2 gap-3">
@@ -237,6 +231,12 @@ export default function MainContent() {
                         暂无自定义字段，编辑条目可添加更多信息
                       </div>
                     </Show>
+                    <SectionTitle icon={<FileText size={13} />} title="备注" />
+                    <div class="rounded-lg border border-zinc-800 bg-zinc-800/40 p-3">
+                      <div class="whitespace-pre-wrap text-xs text-zinc-400 leading-relaxed">
+                        {entry().notes || "无备注内容"}
+                      </div>
+                    </div>
                   </div>
                 </Match>
               </Switch>
