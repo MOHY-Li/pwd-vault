@@ -138,4 +138,6 @@ shasum -a 256 target/release/bundle/dmg/Pwd-Vault_X.Y.Z_aarch64.dmg
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2025 MOHY-Li
+
+本项目基于 MIT 协议开源，您可以自由使用、修改和分发，但需保留原始版权声明和许可声明。详见 [LICENSE](LICENSE) 文件。
