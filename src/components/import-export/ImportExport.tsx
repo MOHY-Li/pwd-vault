@@ -83,13 +83,23 @@ export default function ImportExport() {
     if (!file) return;
     const text = await file.text();
     setImportData(text);
-    // Auto-detect format
+    // Auto-detect format and estimate count
     try {
       const fmt = await detectImportFormat(text, file.name);
       setImportFormat(fmt);
-      showStatus("info", `已检测格式: ${fmt}，共 ${previewCount ?? "?"} 条待导入`);
+      // Estimate preview count
+      try {
+        const parsed = JSON.parse(text);
+        const arr = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
+        const count = Array.isArray(arr) ? arr.length : 1;
+        setPreviewCount(count);
+        showStatus("info", `已检测格式: ${fmt}，共 ${count} 条待导入`);
+      } catch {
+        setPreviewCount(null);
+        showStatus("info", `已检测格式: ${fmt}`);
+      }
     } catch {
-      // Keep current format
+      setPreviewCount(null);
     }
   }
 
