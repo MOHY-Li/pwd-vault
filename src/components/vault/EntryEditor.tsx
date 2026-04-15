@@ -55,6 +55,8 @@ export default function EntryEditor() {
   // New field name input
   const [newFieldName, setNewFieldName] = createSignal("");
   const [fieldNameError, setFieldNameError] = createSignal("");
+  // Title duplicate error
+  const [titleError, setTitleError] = createSignal("");
   // Local cache for dynamic custom field values — prevents <For> DOM rebuild on each keystroke
   const [localFieldValues, setLocalFieldValues] = createSignal<Record<string, string>>({});
 
@@ -97,6 +99,7 @@ export default function EntryEditor() {
     } else {
       setEditingEntry(null);
       setForm(null);
+      setTitleError("");
     }
   }
 
@@ -128,16 +131,6 @@ export default function EntryEditor() {
   async function handleSave() {
     let e = form();
     if (!e || !e.title.trim()) return;
-    // Title duplicate check (case-insensitive)
-    const titleLower = e.title.trim().toLowerCase();
-    const isDuplicate = entries.some(existing =>
-      existing.id !== e!.id && existing.title.trim().toLowerCase() === titleLower
-    );
-    if (isDuplicate) {
-      setSaveError("标题已存在，请使用不同的标题");
-      setSaving(false);
-      return;
-    }
     setSaving(true);
     setSaveError("");
     try {
@@ -182,6 +175,7 @@ export default function EntryEditor() {
       setForm({ ...src });
       setShowCancelConfirm(false);
       setSaveError("");
+      setTitleError("");
       setTotpInput("");
       setShowPassword(false);
       setShowTotpSecret(false);
@@ -267,10 +261,34 @@ export default function EntryEditor() {
               <input
                 type="text"
                 value={entry()?.title ?? ""}
-                onInput={(e) => updateField("title", e.currentTarget.value)}
-                class="input-field"
+                onInput={(e) => {
+                  updateField("title", e.currentTarget.value);
+                  setTitleError("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const title = (e.currentTarget as HTMLInputElement).value.trim();
+                    if (!title) {
+                      setTitleError("标题不能为空");
+                    } else {
+                      const titleLower = title.toLowerCase();
+                      const isDuplicate = entries.some(existing =>
+                        existing.id !== entry()?.id && existing.title.trim().toLowerCase() === titleLower
+                      );
+                      if (isDuplicate) {
+                        setTitleError("标题已存在");
+                      } else {
+                        setTitleError("");
+                      }
+                    }
+                  }
+                }}
+                class={`input-field${titleError() ? " !border-red-500/60" : ""}`}
                 placeholder="输入标题..."
               />
+              <Show when={titleError()}>
+                <p class="mt-1 text-[10px] text-red-400">{titleError()}</p>
+              </Show>
             </div>
 
             {/* Tags with existing tag chips */}
