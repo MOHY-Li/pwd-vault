@@ -37,6 +37,10 @@ fn main() {
             entry_purge,
             trash_empty,
             audit_recent,
+            biometric_store_password,
+            biometric_retrieve_password,
+            biometric_delete_password,
+            biometric_is_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

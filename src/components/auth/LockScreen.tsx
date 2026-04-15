@@ -1,8 +1,9 @@
 import { createSignal, Show, onMount } from "solid-js";
-import { Shield, AlertTriangle } from "lucide-solid";
+import { Shield, AlertTriangle, Fingerprint } from "lucide-solid";
 import { createVault, unlockVault } from "../../stores/vault";
 import { appDataDir } from "@tauri-apps/api/path";
 import { exists } from "@tauri-apps/plugin-fs";
+import { biometricStorePassword, biometricRetrievePassword, biometricIsEnabled } from "../../api";
 
 export default function LockScreen() {
   const [password, setPassword] = createSignal("");
@@ -14,6 +15,9 @@ export default function LockScreen() {
   // M5: Track whether a vault file already exists
   const [vaultFileExists, setVaultFileExists] = createSignal(false);
   const [showCreateWarning, setShowCreateWarning] = createSignal(false);
+  // Touch ID state
+  const [biometricAvailable, setBiometricAvailable] = createSignal(false);
+  const [biometricLoading, setBiometricLoading] = createSignal(false);
 
   onMount(async () => {
     const dir = await appDataDir();
@@ -22,6 +26,13 @@ export default function LockScreen() {
     const fileExists = await exists(vaultPath);
     setVaultFileExists(fileExists);
     setIsSetup(!fileExists);
+    // Check if Touch ID is enabled
+    try {
+      const enabled = await biometricIsEnabled();
+      setBiometricAvailable(enabled);
+    } catch {
+      setBiometricAvailable(false);
+    }
   });
 
   async function handleSubmit(e: Event) {
@@ -49,6 +60,12 @@ export default function LockScreen() {
     try {
       if (isSetup()) {
         await createVault(pwd, defaultPath());
+        // After creating vault, ask about Touch ID
+        const enableBiometric = window.confirm("密码库创建成功！是否启用 Touch ID 解锁？\n\n启用后下次解锁只需验证指纹，无需输入密码。");
+        if (enableBiometric) {
+          await biometricStorePassword(pwd);
+          setBiometricAvailable(true);
+        }
       } else {
         await unlockVault(pwd, defaultPath());
       }
@@ -59,6 +76,21 @@ export default function LockScreen() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleBiometric() {
+    setError("");
+    setBiometricLoading(true);
+    try {
+      const pwd = await biometricRetrievePassword();
+      await unlockVault(pwd, defaultPath());
+      setPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      setError("Touch ID 验证失败，请使用主密码解锁");
+    } finally {
+      setBiometricLoading(false);
     }
   }
 
@@ -170,6 +202,18 @@ export default function LockScreen() {
           >
             {loading() ? "处理中..." : isSetup() ? "创建密码库" : "解锁"}
           </button>
+
+          <Show when={!isSetup() && biometricAvailable()}>
+            <button
+              type="button"
+              disabled={biometricLoading()}
+              onClick={handleBiometric}
+              class="flex w-full items-center justify-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-700 disabled:opacity-50"
+            >
+              <Fingerprint size={18} />
+              {biometricLoading() ? "验证中..." : "使用 Touch ID 解锁"}
+            </button>
+          </Show>
         </form>
       </div>
     </div>

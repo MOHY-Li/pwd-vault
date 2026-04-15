@@ -2,6 +2,7 @@ use pwd_vault_core::audit::{AuditEventType, AuditLog};
 use pwd_vault_core::entry::Entry;
 use pwd_vault_core::generator::{self, CharSet, GeneratorConfig};
 use pwd_vault_core::import_export::{self, ExportFormat, ImportFormat};
+use pwd_vault_core::keychain;
 use pwd_vault_core::strength;
 use pwd_vault_core::totp;
 use pwd_vault_core::vault::VaultFile;
@@ -616,4 +617,29 @@ pub fn audit_recent(count: usize, audit_state: State<'_, AuditState>) -> Result<
     let log = audit_state.0.lock().map_err(|e| e.to_string())?;
     let entries = log.recent(count);
     serde_json::to_string(entries).map_err(|e| format!("serialization error: {e}"))
+}
+
+// --------------------------------------------------------------------------
+// Biometric (Touch ID) commands
+// --------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn biometric_store_password(password: String) -> Result<(), String> {
+    keychain::store_password(&password).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn biometric_retrieve_password() -> Result<String, String> {
+    keychain::retrieve_password().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn biometric_delete_password() -> Result<(), String> {
+    keychain::delete_password().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn biometric_is_enabled() -> Result<bool, String> {
+    // Check if a password is stored in keychain
+    Ok(keychain::retrieve_password().is_ok())
 }

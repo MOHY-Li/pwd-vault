@@ -18,6 +18,7 @@ pub mod entry;
 pub mod error;
 pub mod generator;
 pub mod import_export;
+pub mod keychain;
 pub mod strength;
 pub mod totp;
 pub mod vault;
