@@ -1,35 +1,57 @@
 import { For, Show, createSignal } from "solid-js";
-import { ArrowLeftRight, X, Download, Upload, AlertTriangle, CheckCircle, FileText, Clipboard } from "lucide-solid";
-import { vaultImport, vaultExport, detectImportFormat } from "../../api";
+import { ArrowLeftRight, X, Download, Upload, AlertTriangle, CheckCircle, FileText, KeyRound } from "lucide-solid";
+import { vaultImport, vaultExport, vaultExportFile, vaultImportFile } from "../../api";
 import { saveVault, refreshEntries, refreshTrash, showImportExport, setShowImportExport } from "../../stores/vault";
 
 const IMPORT_FORMATS = [
-  { key: "json", label: "JSON", desc: "通用 JSON 格式" },
-  { key: "csv", label: "CSV", desc: "逗号分隔值" },
-  { key: "bitwarden_json", label: "Bitwarden JSON", desc: "Bitwarden 导出" },
-  { key: "bitwarden_csv", label: "Bitwarden CSV", desc: "Bitwarden CSV 导出" },
-  { key: "onepassword_csv", label: "1Password CSV", desc: "1Password 导出" },
-  { key: "keepass_xml", label: "KeePass XML", desc: "KeePass XML 导出" },
+  { key: "vault", label: ".vault", desc: "pwd-vault 加密备份" },
+  { key: "json", label: ".json", desc: "pwd-vault JSON 格式" },
 ];
 
 const EXPORT_FORMATS = [
-  { key: "json", label: "JSON", desc: "完整字段，通用格式" },
-  { key: "csv", label: "CSV", desc: "基础字段，兼容其他工具" },
+  { key: "vault", label: ".vault", desc: "加密格式，完整备份" },
+  { key: "json", label: ".json", desc: "完整字段，可迁移到其他工具" },
 ];
 
 export default function ImportExport() {
   const [mode, setMode] = createSignal<"import" | "export">("import");
-  const [importFormat, setImportFormat] = createSignal("json");
-  const [exportFormat, setExportFormat] = createSignal("json");
-  const [excludePasswords, setExcludePasswords] = createSignal(true);
+  const [importFormat, setImportFormat] = createSignal("vault");
+  const [exportFormat, setExportFormat] = createSignal("vault");
   const [importData, setImportData] = createSignal("");
-  const [inputMethod, setInputMethod] = createSignal<"paste" | "file">("paste");
   const [status, setStatus] = createSignal<{ type: "info" | "success" | "error"; msg: string } | null>(null);
   const [busy, setBusy] = createSignal(false);
-  const [previewCount, setPreviewCount] = createSignal<number | null>(null);
+  const [importPassword, setImportPassword] = createSignal("");
+  const [passwordError, setPasswordError] = createSignal("");
+  const [fileName, setFileName] = createSignal("");
+
+  let fileInputRef: HTMLInputElement;
 
   function showStatus(type: "info" | "success" | "error", msg: string) {
     setStatus({ type, msg });
+  }
+
+  async function processFile(file: File) {
+    setFileName(file.name);
+    if (file.name.endsWith(".vault")) {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = "";
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+      const base64 = btoa(binary);
+      setImportData(base64);
+      setImportFormat("vault");
+      return;
+    }
+    const text = await file.text();
+    setImportData(text);
+    try {
+      const parsed = JSON.parse(text);
+      const arr = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
+      const count = Array.isArray(arr) ? arr.length : 1;
+      setFileName(`${file.name} (${count} 条)`);
+    } catch {
+      // ignore parse errors
+    }
   }
 
   async function handleImport() {
@@ -38,18 +60,41 @@ export default function ImportExport() {
       showStatus("error", "请先上传文件或粘贴数据");
       return;
     }
+    if (importFormat() === "vault" && !importPassword()) {
+      showStatus("error", "导入 .vault 文件需要输入源密码");
+      return;
+    }
     setBusy(true);
-    showStatus("info", "导入中...");
+    setStatus(null);
     try {
-      const count = await vaultImport(importFormat(), data);
+      let count: number;
+      let resultStr: string;
+      if (importFormat() === "vault") {
+        resultStr = await vaultImportFile(importPassword(), data);
+      } else {
+        resultStr = await vaultImport(importFormat(), data);
+      }
+      // Parse "imported:skipped:renamed"
+      const [imported, skipped, renamed] = resultStr.split(":").map(Number);
+      const parts: string[] = [];
+      const total = imported + renamed;
+      if (total > 0) parts.push(`导入 ${total} 条`);
+      if (renamed > 0) parts.push(`重命名 ${renamed} 条`);
+      if (skipped > 0) parts.push(`跳过 ${skipped} 条重复`);
       await saveVault();
       await refreshEntries();
       await refreshTrash();
-      showStatus("success", `成功导入 ${count} 条条目`);
+      showStatus("success", parts.length > 0 ? parts.join("，") : "没有新条目需要导入");
       setImportData("");
-      setPreviewCount(null);
+      setImportPassword("");
+      setFileName("");
     } catch (err) {
-      showStatus("error", `导入失败: ${err instanceof Error ? err.message : String(err)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (importFormat() === "vault" && /密码|password|decrypt|解密/i.test(msg)) {
+        setPasswordError("源保险库密码错误");
+      } else {
+        showStatus("error", `导入失败: ${msg}`);
+      }
     } finally {
       setBusy(false);
     }
@@ -59,10 +104,20 @@ export default function ImportExport() {
     setBusy(true);
     showStatus("info", "导出中...");
     try {
-      const result = await vaultExport(exportFormat(), excludePasswords());
-      const ext = exportFormat() === "csv" ? "csv" : "json";
-      const mime = exportFormat() === "csv" ? "text/csv" : "application/json";
-      const blob = new Blob([result], { type: mime });
+      let blob: Blob;
+      let ext: string;
+      if (exportFormat() === "vault") {
+        const base64 = await vaultExportFile();
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        blob = new Blob([bytes], { type: "application/octet-stream" });
+        ext = "vault";
+      } else {
+        const result = await vaultExport(exportFormat(), false);
+        ext = "json";
+        blob = new Blob([result], { type: "application/json" });
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -81,51 +136,9 @@ export default function ImportExport() {
     const input = e.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    setImportData(text);
-    // Auto-detect format and estimate count
-    try {
-      const fmt = await detectImportFormat(text, file.name);
-      setImportFormat(fmt);
-      // Estimate preview count
-      try {
-        const parsed = JSON.parse(text);
-        const arr = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
-        const count = Array.isArray(arr) ? arr.length : 1;
-        setPreviewCount(count);
-        showStatus("info", `已检测格式: ${fmt}，共 ${count} 条待导入`);
-      } catch {
-        setPreviewCount(null);
-        showStatus("info", `已检测格式: ${fmt}`);
-      }
-    } catch {
-      setPreviewCount(null);
-    }
-  }
-
-  function handlePasteInput(e: Event) {
-    const val = (e.target as HTMLTextAreaElement).value;
-    setImportData(val);
-    // Estimate preview count based on format
-    if (!val.trim()) {
-      setPreviewCount(null);
-      return;
-    }
-    try {
-      const fmt = importFormat();
-      if (fmt === "json" || fmt === "bitwarden_json") {
-        const parsed = JSON.parse(val);
-        const arr = Array.isArray(parsed) ? parsed : (parsed.items ?? []);
-        setPreviewCount(Array.isArray(arr) ? arr.length : 1);
-      } else {
-        // Rough line count for CSV/XML
-        const lines = val.trim().split("\n").length;
-        setPreviewCount(Math.max(0, lines - 1)); // subtract header
-      }
-    } catch {
-      setPreviewCount(null);
-    }
-    setStatus(null);
+    await processFile(file);
+    // Reset input so the same file can be re-selected
+    input.value = "";
   }
 
   return (
@@ -168,92 +181,119 @@ export default function ImportExport() {
               <div class="space-y-3">
                 {/* Format selector */}
                 <div>
-                  <label class="mb-1.5 block text-xs text-zinc-400">格式</label>
-                  <div class="grid grid-cols-3 gap-1.5">
+                  <label class="mb-1.5 block text-xs text-zinc-400">导入格式</label>
+                  <div class="flex gap-2">
                     <For each={IMPORT_FORMATS}>
                       {(fmt) => (
                         <button
-                          class={`rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                          class={`flex-1 rounded-lg px-3 py-2 text-xs transition-colors ${
                             importFormat() === fmt.key
                               ? "bg-emerald-600 text-white"
                               : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
                           }`}
                           onClick={() => setImportFormat(fmt.key)}
-                          title={fmt.desc}
                         >
                           {fmt.label}
+                          <div class="text-[10px] opacity-70">{fmt.desc}</div>
                         </button>
                       )}
                     </For>
                   </div>
                 </div>
 
-                {/* Input method toggle */}
-                <div>
-                  <label class="mb-1.5 block text-xs text-zinc-400">数据来源</label>
-                  <div class="flex rounded-lg bg-zinc-800 p-1">
-                    <button
-                      class={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                        inputMethod() === "paste" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
-                      }`}
-                      onClick={() => { setInputMethod("paste"); setStatus(null); }}
-                    >
-                      <Clipboard size={13} /> 粘贴
-                    </button>
-                    <button
-                      class={`flex-1 flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                        inputMethod() === "file" ? "bg-zinc-700 text-white" : "text-zinc-400 hover:text-zinc-200"
-                      }`}
-                      onClick={() => { setInputMethod("file"); setStatus(null); }}
-                    >
-                      <FileText size={13} /> 上传文件
-                    </button>
-                  </div>
-                </div>
-
-                {/* Paste area */}
-                <Show when={inputMethod() === "paste"}>
+                {/* Password field for .vault import */}
+                <Show when={importFormat() === "vault"}>
                   <div>
-                    <textarea
-                      value={importData()}
-                      onInput={handlePasteInput}
-                      rows={6}
-                      class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none placeholder:text-zinc-600"
-                      placeholder="粘贴 JSON / CSV / XML 数据..."
-                    />
-                    <Show when={previewCount() !== null}>
-                      <p class="mt-1.5 text-xs text-zinc-500">
-                        检测到约 <span class="text-emerald-400 font-medium">{previewCount()}</span> 条待导入条目
-                      </p>
+                    <label class="mb-1.5 block text-xs text-zinc-400">源保险库密码</label>
+                    <div class="relative">
+                      <KeyRound size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+                      <input
+                        type="password"
+                        value={importPassword()}
+                        onInput={(e) => { setImportPassword(e.currentTarget.value); setPasswordError(""); }}
+                        placeholder="输入源 .vault 文件的解锁密码"
+                        class="w-full rounded-lg border border-zinc-700 bg-zinc-800 py-2 pl-9 pr-3 text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none placeholder:text-zinc-600"
+                      />
+                    </div>
+                    <Show when={passwordError()}>
+                      <p class="mt-1 text-xs text-red-400">{passwordError()}</p>
                     </Show>
                   </div>
                 </Show>
 
-                {/* File upload */}
-                <Show when={inputMethod() === "file"}>
-                  <div>
-                    <label class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-700 bg-zinc-800/50 p-6 text-xs text-zinc-400 cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-800 transition-colors">
-                      <FileText size={24} class="mb-2 text-zinc-500" />
-                      <span>点击选择文件 或 拖拽到此处</span>
-                      <span class="mt-1 text-[10px] text-zinc-600">支持 .json .csv .xml .txt</span>
-                      <input
-                        type="file"
-                        accept=".json,.csv,.xml,.txt"
-                        onChange={handleFileUpload}
-                        class="hidden"
+                {/* Paste area for .json only + File upload */}
+                <div class="flex gap-3">
+                  <Show when={importFormat() === "json"}>
+                    <div class="flex-1">
+                      <textarea
+                        value={importData()}
+                        onInput={(e) => { setImportData((e.target as HTMLTextAreaElement).value); setStatus(null); }}
+                        rows={4}
+                        class="w-full h-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 font-mono text-xs text-zinc-200 focus:border-emerald-500 focus:outline-none placeholder:text-zinc-600 resize-none"
+                        placeholder='粘贴 JSON 数据...'
                       />
-                    </label>
+                    </div>
+                  </Show>
+
+                  <div
+                    class={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-700 bg-zinc-800/50 text-xs text-zinc-400 cursor-pointer hover:border-emerald-500/50 hover:bg-zinc-800 transition-colors ${importFormat() === "json" ? "w-40 shrink-0" : "flex-1 p-6"}`}
+                    onClick={() => fileInputRef.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      (e.currentTarget as HTMLElement).classList.add("border-emerald-500/50", "bg-zinc-800");
+                    }}
+                    onDragLeave={(e) => {
+                      (e.currentTarget as HTMLElement).classList.remove("border-emerald-500/50");
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      (e.currentTarget as HTMLElement).classList.remove("border-emerald-500/50");
+                      const file = e.dataTransfer?.files?.[0];
+                      if (!file) return;
+                      processFile(file);
+                    }}
+                  >
+                    <Show when={fileName()} fallback={
+                      <>
+                        <FileText size={24} class="mb-1.5 text-zinc-500" />
+                        <span>{importFormat() === "json" ? "选择文件" : "点击选择文件 或 拖拽到此处"}</span>
+                        <span class="mt-0.5 text-[10px] text-zinc-600">支持 .json .vault</span>
+                      </>
+                    }>
+                      <div class="flex items-center gap-2 text-emerald-400">
+                        <FileText size={20} />
+                        <span class="font-medium">{fileName()}</span>
+                      </div>
+                      <span class="mt-1 text-[10px] text-zinc-500">点击重新选择</span>
+                    </Show>
                   </div>
-                </Show>
+                  <input
+                    ref={fileInputRef!}
+                    type="file"
+                    accept=".json,.vault"
+                    onChange={handleFileUpload}
+                    class="hidden"
+                  />
+                </div>
               </div>
             </Show>
 
             <Show when={mode() === "export"}>
               <div class="space-y-3">
-                <div class="flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-400">
-                  <AlertTriangle size={14} class="mt-0.5 shrink-0" />
-                  <span>导出为明文数据，请妥善保管。导出后建议立即删除明文文件。</span>
-                </div>
+                <Show when={exportFormat() === "vault"}>
+                  <div class="flex items-start gap-2 rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-400">
+                    <AlertTriangle size={14} class="mt-0.5 shrink-0" />
+                    <span>导出的 .vault 文件已加密，请妥善保管。导出后建议立即删除明文文件。</span>
+                  </div>
+                </Show>
+                <Show when={exportFormat() !== "vault"}>
+                  <div class="flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-400">
+                    <AlertTriangle size={14} class="mt-0.5 shrink-0" />
+                    <span>导出为明文数据，请妥善保管。导出后建议立即删除明文文件。</span>
+                  </div>
+                </Show>
                 <div>
                   <label class="mb-1.5 block text-xs text-zinc-400">导出格式</label>
                   <div class="flex gap-2">
@@ -274,18 +314,6 @@ export default function ImportExport() {
                     </For>
                   </div>
                 </div>
-                <label class="flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-800/50 p-3 text-xs text-zinc-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={excludePasswords()}
-                    onChange={(e) => setExcludePasswords(e.currentTarget.checked)}
-                    class="accent-emerald-500"
-                  />
-                  <div>
-                    <div class="font-medium">排除敏感数据</div>
-                    <div class="text-[10px] text-zinc-500">导出时不包含密码、TOTP 密钥和密码历史</div>
-                  </div>
-                </label>
               </div>
             </Show>
 
@@ -322,7 +350,7 @@ export default function ImportExport() {
                 disabled={busy()}
                 class="w-full rounded-lg bg-emerald-600 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
               >
-                {busy() ? "导出中..." : "导出文件"}
+                {busy() ? "导出中..." : "开始导出"}
               </button>
             </Show>
           </div>

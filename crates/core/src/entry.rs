@@ -33,7 +33,7 @@ pub enum CustomFieldType {
 }
 
 /// A user-defined key/value field attached to an entry.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct CustomField {
     pub name: String,
     pub value: String,

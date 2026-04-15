@@ -6,6 +6,7 @@ use pwd_vault_tauri_plugin::{AuditState, VaultPath, VaultState};
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(VaultState(Default::default()))
         .manage(VaultPath(Default::default()))
         .manage(AuditState(Default::default()))
@@ -28,6 +29,8 @@ fn main() {
             totp_parse_uri,
             vault_import,
             vault_export,
+            vault_export_file,
+            vault_import_file,
             detect_import_format,
             trash_list,
             entry_restore,

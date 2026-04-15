@@ -130,7 +130,39 @@ export default function EntryEditor() {
 
   async function handleSave() {
     let e = form();
-    if (!e || !e.title.trim()) return;
+    if (!e) return;
+
+    // Validate required fields based on entry type
+    const missing: string[] = [];
+    if (!e.title.trim()) missing.push("标题");
+    switch (e.entry_type) {
+      case "login":
+        if (!e.username.trim()) missing.push("用户名");
+        if (!e.password) missing.push("密码");
+        if (!e.url.trim()) missing.push("网址");
+        break;
+      case "note":
+        if (!e.notes.trim()) missing.push("备注");
+        break;
+      case "card":
+        if (!e.username.trim()) missing.push("持卡人");
+        if (!e.password.trim()) missing.push("卡号");
+        break;
+      case "identity":
+        if (!e.username.trim()) missing.push("姓名");
+        {
+          const email = e.custom_fields?.find((c: CustomField) => c.name === "邮箱");
+          if (!email?.value.trim()) missing.push("邮箱");
+          const phone = e.custom_fields?.find((c: CustomField) => c.name === "电话");
+          if (!phone?.value.trim()) missing.push("电话");
+        }
+        break;
+    }
+    if (missing.length > 0) {
+      setSaveError(`必填字段未填写：${missing.join("、")}`);
+      return;
+    }
+
     setSaving(true);
     setSaveError("");
     try {
@@ -334,11 +366,11 @@ export default function EntryEditor() {
               <Match when={entry()?.entry_type === "login"}>
                 <SectionHeader icon={<KeyRound size={13} />} title="账户信息" />
                 <div>
-                  <FieldLabel text="用户名" />
+                  <FieldLabel text="用户名" required />
                   <input type="text" value={entry()?.username ?? ""} onInput={(e) => updateField("username", e.currentTarget.value)} class="input-field" placeholder="user@example.com" />
                 </div>
                 <div>
-                  <FieldLabel text="密码" />
+                  <FieldLabel text="密码" required />
                   <div class="flex gap-1.5">
                     <input
                       type={showPassword() ? "text" : "password"}
@@ -404,7 +436,7 @@ export default function EntryEditor() {
                   </Show>
                 </div>
                 <div>
-                  <FieldLabel text="网址" />
+                  <FieldLabel text="网址" required />
                   <input type="text" value={entry()?.url ?? ""} onInput={(e) => updateField("url", e.currentTarget.value)} class="input-field" placeholder="https://example.com" />
                 </div>
                 <div>
@@ -444,6 +476,7 @@ export default function EntryEditor() {
               {/* ===== NOTE ===== */}
               <Match when={entry()?.entry_type === "note"}>
                 <SectionHeader icon={<FileText size={13} />} title="笔记内容" />
+                <FieldLabel text="备注" required />
                 <textarea
                   value={entry()?.notes ?? ""}
                   onInput={(e) => updateField("notes", e.currentTarget.value)}
@@ -458,7 +491,7 @@ export default function EntryEditor() {
                 <SectionHeader icon={<CreditCard size={13} />} title="卡片信息" />
                 <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <FieldLabel text="持卡人" />
+                    <FieldLabel text="持卡人" required />
                     <input type="text" value={entry()?.username ?? ""} onInput={(e) => updateField("username", e.currentTarget.value)} class="input-field" placeholder="张三" />
                   </div>
                   <div>
@@ -471,7 +504,7 @@ export default function EntryEditor() {
                   </div>
                 </div>
                 <div>
-                  <FieldLabel text="卡号" />
+                  <FieldLabel text="卡号" required />
                   <input type="text" value={entry()?.password ?? ""} onInput={(e) => {
                     // L7: Save cursor position before formatting
                     const el = e.currentTarget;
@@ -493,7 +526,7 @@ export default function EntryEditor() {
                 <SectionHeader icon={<UserRound size={13} />} title="身份信息" />
                 <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <FieldLabel text="姓名" />
+                    <FieldLabel text="姓名" required />
                     <input type="text" value={entry()?.username ?? ""} onInput={(e) => updateField("username", e.currentTarget.value)} class="input-field" placeholder="张三" />
                   </div>
                   <div>
@@ -503,7 +536,7 @@ export default function EntryEditor() {
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                   <div>
-                    <FieldLabel text="邮箱" />
+                    <FieldLabel text="邮箱" required />
                     <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "邮箱"); return f ? f.value : ""; })()} onInput={(e) => {
                       const fields = [...(entry()?.custom_fields ?? [])];
                       const idx = fields.findIndex((c: CustomField) => c.name === "邮箱");
@@ -513,7 +546,7 @@ export default function EntryEditor() {
                     }} class="input-field" placeholder="user@example.com" />
                   </div>
                   <div>
-                    <FieldLabel text="电话" />
+                    <FieldLabel text="电话" required />
                     <input type="text" value={(() => { const f = entry()?.custom_fields?.find((c: CustomField) => c.name === "电话"); return f ? f.value : ""; })()} onInput={(e) => {
                       let raw = e.currentTarget.value.replace(/[^\d]/g, "").slice(0, 11);
                       const fields = [...(entry()?.custom_fields ?? [])];

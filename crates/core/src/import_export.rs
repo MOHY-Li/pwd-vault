@@ -1,5 +1,6 @@
 use crate::entry::{Entry, EntryType};
 use crate::error::{Result, VaultError};
+use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
 // Format enums
@@ -36,6 +37,140 @@ pub fn import_entries(format: &ImportFormat, data: &str) -> Result<Vec<Entry>> {
         ImportFormat::OnePasswordCsv => import_onepassword_csv(data),
         ImportFormat::KeePassXml => import_keepass_xml(data),
     }
+}
+
+/// Import entries from a .vault file using the provided password.
+/// Returns all (non-deleted) entries from the source vault.
+pub fn import_vault_bytes(password: &str, data: &[u8]) -> Result<Vec<Entry>> {
+    // Write to a temporary file and use VaultFile::open
+    let temp_path = std::env::temp_dir().join(format!("pwd-vault-import-{}", uuid::Uuid::new_v4()));
+    std::fs::write(&temp_path, data)?;
+    let vault = crate::vault::VaultFile::open(password, &temp_path)?;
+    std::fs::remove_file(&temp_path).ok();
+    Ok(vault.entries().to_vec())
+}
+
+// ---------------------------------------------------------------------------
+// Import deduplication
+// ---------------------------------------------------------------------------
+
+/// Result of a deduplicated import operation.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped: usize,
+    pub renamed: usize,
+}
+
+impl std::fmt::Display for ImportResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}:{}", self.imported, self.skipped, self.renamed)
+    }
+}
+
+/// Merge `incoming` entries into `existing`, applying deduplication rules per entry type.
+///
+/// Returns a list of entries that should be added and an `ImportResult` with statistics.
+pub fn deduplicate_import(existing: &[Entry], incoming: Vec<Entry>) -> (Vec<Entry>, ImportResult) {
+    let mut to_add = Vec::new();
+    let mut skipped = 0usize;
+    let mut renamed = 0usize;
+
+    for mut entry in incoming {
+        entry.id = uuid::Uuid::new_v4().to_string();
+
+        let duplicate = existing
+            .iter()
+            .chain(to_add.iter())
+            .find(|e| is_exact_duplicate(e, &entry));
+
+        if duplicate.is_some() {
+            skipped += 1;
+            continue;
+        }
+
+        let has_conflict = existing
+            .iter()
+            .chain(to_add.iter())
+            .any(|e| is_partial_conflict(e, &entry));
+
+        if has_conflict {
+            // Rename with incrementing suffix
+            let base_title = entry.title.clone();
+            let mut suffix = 2u32;
+            loop {
+                let new_title = format!("{base_title} ({suffix})");
+                let title_exists = existing
+                    .iter()
+                    .chain(to_add.iter())
+                    .any(|e| e.title == new_title && same_type_and_key(e, &entry));
+                if !title_exists {
+                    entry.title = new_title;
+                    break;
+                }
+                suffix += 1;
+            }
+            renamed += 1;
+        }
+
+        to_add.push(entry);
+    }
+
+    let total_imported = to_add.len();
+    (
+        to_add,
+        ImportResult {
+            imported: total_imported - renamed,
+            skipped,
+            renamed,
+        },
+    )
+}
+
+/// Check if two entries are exact duplicates (all core fields match).
+fn is_exact_duplicate(a: &Entry, b: &Entry) -> bool {
+    if a.entry_type != b.entry_type {
+        return false;
+    }
+    match a.entry_type {
+        EntryType::Login => {
+            a.title == b.title
+                && a.username == b.username
+                && a.url == b.url
+                && a.password == b.password
+        }
+        EntryType::Note => a.title == b.title && a.notes == b.notes,
+        EntryType::Card => {
+            a.title == b.title && a.username == b.username && a.password == b.password
+        }
+        EntryType::Identity => {
+            a.title == b.title
+                && a.username == b.username
+                && a.url == b.url
+                && a.notes == b.notes
+                && a.custom_fields == b.custom_fields
+        }
+        EntryType::Custom(_) => a.title == b.title && a.notes == b.notes,
+    }
+}
+
+/// Check if two entries have a partial conflict (same identity key but different content).
+fn is_partial_conflict(a: &Entry, b: &Entry) -> bool {
+    if a.entry_type != b.entry_type {
+        return false;
+    }
+    match a.entry_type {
+        EntryType::Login => a.title == b.title && a.username == b.username && a.url == b.url,
+        EntryType::Note => a.title == b.title,
+        EntryType::Card => a.title == b.title && a.username == b.username,
+        EntryType::Identity => a.title == b.title,
+        EntryType::Custom(_) => a.title == b.title,
+    }
+}
+
+/// Check if two entries share the same type and identity key (for title collision detection).
+fn same_type_and_key(a: &Entry, b: &Entry) -> bool {
+    is_partial_conflict(a, b)
 }
 
 // ---------------------------------------------------------------------------
@@ -189,20 +324,20 @@ fn import_bitwarden_json(data: &str) -> Result<Vec<Entry>> {
         if let Some(login) = item.get("login") {
             e.username = login["username"].as_str().unwrap_or("").to_string();
             e.password = login["password"].as_str().unwrap_or("").to_string();
-            if let Some(uris) = login.get("uris").and_then(|u| u.as_array())
-                && let Some(first_uri) = uris.first()
-            {
-                e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
+            if let Some(uris) = login.get("uris").and_then(|u| u.as_array()) {
+                if let Some(first_uri) = uris.first() {
+                    e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
+                }
             }
         }
 
         e.notes = item["notes"].as_str().unwrap_or("").to_string();
 
         // folder
-        if let Some(folder) = item.get("folderName").and_then(|f| f.as_str())
-            && !folder.is_empty()
-        {
-            e.folder = Some(folder.to_string());
+        if let Some(folder) = item.get("folderName").and_then(|f| f.as_str()) {
+            if !folder.is_empty() {
+                e.folder = Some(folder.to_string());
+            }
         }
 
         // favorite

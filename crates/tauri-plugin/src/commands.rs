@@ -196,6 +196,7 @@ pub fn entry_add(
         .ok_or_else(|| "no vault is open".to_string())?;
 
     let id = entry.id.clone();
+    let title = entry.title.clone();
     vault.add_entry(entry);
 
     audit_state
@@ -204,6 +205,7 @@ pub fn entry_add(
         .map_err(|e| e.to_string())?
         .log(AuditEventType::EntryCreated {
             entry_id: id.clone(),
+            title,
         });
     Ok(id)
 }
@@ -218,6 +220,7 @@ pub fn entry_update(
         serde_json::from_str(&entry_json).map_err(|e| format!("invalid entry JSON: {e}"))?;
 
     let id = entry.id.clone();
+    let title = entry.title.clone();
     let mut guard = get_vault(&vault_state)?;
     let vault = guard
         .as_mut()
@@ -228,7 +231,7 @@ pub fn entry_update(
         .0
         .lock()
         .map_err(|e| e.to_string())?
-        .log(AuditEventType::EntryUpdated { entry_id: id });
+        .log(AuditEventType::EntryUpdated { entry_id: id, title });
     Ok(())
 }
 
@@ -243,12 +246,17 @@ pub fn entry_delete(
         .as_mut()
         .ok_or_else(|| "no vault is open".to_string())?;
 
+    let title = vault.entries().iter()
+        .find(|e| e.id == id)
+        .map(|e| e.title.clone())
+        .unwrap_or_default();
+
     if vault.delete_entry(&id) {
         audit_state
             .0
             .lock()
             .map_err(|e| e.to_string())?
-            .log(AuditEventType::EntryDeleted { entry_id: id });
+            .log(AuditEventType::EntryDeleted { entry_id: id, title });
         Ok(())
     } else {
         Err(format!("entry not found: {id}"))
@@ -414,26 +422,21 @@ pub fn vault_import(
 ) -> Result<String, String> {
     let import_format = match format.as_str() {
         "json" => ImportFormat::Json,
-        "csv" => ImportFormat::Csv,
-        "bitwarden_json" => ImportFormat::BitwardenJson,
-        "bitwarden_csv" => ImportFormat::BitwardenCsv,
-        "onepassword_csv" => ImportFormat::OnePasswordCsv,
-        "keepass_xml" => ImportFormat::KeePassXml,
         other => return Err(format!("unknown import format: {other}")),
     };
 
-    let entries =
+    let incoming =
         import_export::import_entries(&import_format, &data).map_err(|e| e.to_string())?;
 
-    let count = entries.len();
     let mut guard = get_vault(&vault_state)?;
     let vault = guard
         .as_mut()
         .ok_or_else(|| "no vault is open".to_string())?;
 
-    for mut entry in entries {
-        // R4: Assign new UUID to prevent overwriting existing entries
-        entry.id = uuid::Uuid::new_v4().to_string();
+    let (to_add, result) = import_export::deduplicate_import(vault.entries(), incoming);
+
+    let _count = to_add.len();
+    for entry in to_add {
         vault.add_entry(entry);
     }
 
@@ -441,9 +444,74 @@ pub fn vault_import(
         .0
         .lock()
         .map_err(|e| e.to_string())?
-        .log(AuditEventType::DataImported { count });
+        .log(AuditEventType::DataImported { imported: result.imported, skipped: result.skipped, renamed: result.renamed });
 
-    Ok(format!("{count}"))
+    Ok(result.to_string())
+}
+
+#[tauri::command]
+pub fn vault_export_file(
+    vault_path: State<'_, VaultPath>,
+    audit_state: State<'_, AuditState>,
+) -> Result<String, String> {
+    let path_guard = get_path(&vault_path)?;
+    let path = path_guard
+        .as_ref()
+        .ok_or_else(|| "no vault path".to_string())?;
+
+    // Read the raw vault file bytes
+    let data = std::fs::read(path).map_err(|e| format!("failed to read vault: {e}"))?;
+
+    // Return as base64 for easy transfer to frontend
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let encoded = STANDARD.encode(&data);
+
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::DataExported);
+
+    Ok(encoded)
+}
+
+#[tauri::command]
+pub fn vault_import_file(
+    password: String,
+    data: String,
+    vault_state: State<'_, VaultState>,
+    audit_state: State<'_, AuditState>,
+) -> Result<String, String> {
+    // Decode base64
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    let bytes = STANDARD
+        .decode(&data)
+        .map_err(|e| format!("invalid base64: {e}"))?;
+
+    // Import entries from the vault bytes using the provided password
+    let incoming = pwd_vault_core::import_export::import_vault_bytes(&password, &bytes)
+        .map_err(|e| e.to_string())?;
+
+    let mut guard = get_vault(&vault_state)?;
+    let vault = guard
+        .as_mut()
+        .ok_or_else(|| "no vault is open".to_string())?;
+
+    let (to_add, result) =
+        pwd_vault_core::import_export::deduplicate_import(vault.entries(), incoming);
+
+    let _count = to_add.len();
+    for entry in to_add {
+        vault.add_entry(entry);
+    }
+
+    audit_state
+        .0
+        .lock()
+        .map_err(|e| e.to_string())?
+        .log(AuditEventType::DataImported { imported: result.imported, skipped: result.skipped, renamed: result.renamed });
+
+    Ok(result.to_string())
 }
 
 #[tauri::command]

@@ -176,13 +176,22 @@ export async function totpParseUri(uri: string): Promise<TotpConfig> {
 // Import / Export
 // ---------------------------------------------------------------------------
 
-export async function vaultImport(format: string, data: string): Promise<number> {
-  const count = await invoke<string>("vault_import", { format, data });
-  return parseInt(count, 10);
+export async function vaultImport(format: string, data: string): Promise<string> {
+  return await invoke<string>("vault_import", { format, data });
 }
 
 export async function vaultExport(format: string, excludePasswords: boolean = false): Promise<string> {
   return await invoke<string>("vault_export", { format, excludePasswords });
+}
+
+// Vault file export (returns base64-encoded .vault file)
+export async function vaultExportFile(): Promise<string> {
+  return await invoke<string>("vault_export_file");
+}
+
+// Vault file import (takes base64 .vault file + source password)
+export async function vaultImportFile(password: string, data: string): Promise<string> {
+  return await invoke<string>("vault_import_file", { password, data });
 }
 
 export async function detectImportFormat(data: string, filename?: string): Promise<string> {

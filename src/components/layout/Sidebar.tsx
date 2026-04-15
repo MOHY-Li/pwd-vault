@@ -78,7 +78,7 @@ export default function Sidebar() {
         return hay.includes(q);
       }
       return true;
-    });
+    }).sort((a: Entry, b: Entry) => a.title.localeCompare(b.title, "en", { sensitivity: "base" }));
   };
 
   function handleNewEntry() {

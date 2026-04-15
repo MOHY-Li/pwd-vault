@@ -25,7 +25,7 @@ export default function AuditLog() {
 
   async function loadEntries() {
     const list = await auditRecent(100);
-    setEntries(list);
+    setEntries([...list].reverse());
     setLoaded(true);
   }
 
@@ -45,17 +45,29 @@ export default function AuditLog() {
     if (e === "DataExported") return icon(Upload, "导出数据");
     if (typeof e === "object") {
       if ("EntryViewed" in e) return icon(Eye, "查看条目 ", `${e.EntryViewed.entry_id.slice(0, 8)}...`);
-      if ("EntryCreated" in e) return icon(Plus, "创建条目 ", `${e.EntryCreated.entry_id.slice(0, 8)}...`);
-      if ("EntryUpdated" in e) return icon(Pencil, "更新条目 ", `${e.EntryUpdated.entry_id.slice(0, 8)}...`);
-      if ("EntryDeleted" in e) return icon(Trash2, "删除条目 ", `${e.EntryDeleted.entry_id.slice(0, 8)}...`);
+      if ("EntryCreated" in e) return icon(Plus, "创建条目 ", fmtTitle(e.EntryCreated.title, e.EntryCreated.entry_id));
+      if ("EntryUpdated" in e) return icon(Pencil, "更新条目 ", fmtTitle(e.EntryUpdated.title, e.EntryUpdated.entry_id));
+      if ("EntryDeleted" in e) return icon(Trash2, "删除条目 ", fmtTitle(e.EntryDeleted.title, e.EntryDeleted.entry_id));
       if ("PasswordCopied" in e) return icon(Copy, "复制密码 ", `${e.PasswordCopied.entry_id.slice(0, 8)}...`);
-      if ("DataImported" in e) return icon(Download, "导入数据 ", `(${e.DataImported.count} 条)`);
+      if ("DataImported" in e) {
+        const d = e.DataImported;
+        const parts: string[] = [];
+        parts.push(`导入 ${d.imported} 条`);
+        if (d.renamed > 0) parts.push(`重命名 ${d.renamed} 条`);
+        if (d.skipped > 0) parts.push(`跳过 ${d.skipped} 条`);
+        return icon(Download, parts.join("，"));
+      }
     }
     return <>未知操作</>;
   }
 
   function formatTime(ts: string): string {
     return new Date(ts).toLocaleString("zh-CN");
+  }
+
+  function fmtTitle(title: string, id: string): string {
+    const shortId = id.slice(0, 8);
+    return title ? `${title} (${shortId})` : `${shortId}...`;
   }
 
   // F4: Reload entries every time the modal opens

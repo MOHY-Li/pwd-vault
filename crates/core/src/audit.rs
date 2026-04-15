@@ -12,15 +12,15 @@ pub enum AuditEventType {
     VaultCreated,
     VaultOpened,
     EntryViewed { entry_id: String },
-    EntryCreated { entry_id: String },
-    EntryUpdated { entry_id: String },
-    EntryDeleted { entry_id: String },
+    EntryCreated { entry_id: String, title: String },
+    EntryUpdated { entry_id: String, title: String },
+    EntryDeleted { entry_id: String, title: String },
     PasswordCopied { entry_id: String },
     VaultLocked,
     VaultUnlocked,
     MasterPasswordChanged,
     DataExported,
-    DataImported { count: usize },
+    DataImported { imported: usize, skipped: usize, renamed: usize },
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +168,7 @@ mod tests {
     fn test_audit_log_save_load() {
         let mut log = AuditLog::new();
         log.log(AuditEventType::VaultCreated);
-        log.log(AuditEventType::DataImported { count: 42 });
+        log.log(AuditEventType::DataImported { imported: 42, skipped: 3, renamed: 1 });
 
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path().to_path_buf();

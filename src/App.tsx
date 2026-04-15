@@ -1,9 +1,14 @@
-import { Show, createEffect } from "solid-js";
+import { Show, createEffect, onMount } from "solid-js";
 import { isUnlocked, initAutoLockListener } from "./stores/vault";
 import LockScreen from "./components/auth/LockScreen";
 import MainLayout from "./components/layout/MainLayout";
 
 export default function App() {
+  // Prevent Tauri webview from navigating on file drag-drop
+  onMount(() => {
+    document.addEventListener("dragover", (e) => e.preventDefault());
+  });
+
   // Initialize auto-lock listener once when the vault is unlocked
   let listenerInitialized = false;
   createEffect(() => {
