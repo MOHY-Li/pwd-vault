@@ -1,75 +1,66 @@
 # Pwd-Vault
 
-全平台密码管理器 — 零信任架构，本地优先，密钥永不离开设备。
+<p align="center">
+  <img src="src-tauri/icons/128x128.png" width="128" height="128" alt="Pwd-Vault Icon">
+</p>
+
+<p align="center">
+  <strong>安全的本地密码管理器</strong><br>
+  零信任架构 · 本地优先 · 密钥永不离开设备
+</p>
+
+<p align="center">
+  <a href="https://github.com/MOHY-Li/pwd-vault/releases"><img src="https://img.shields.io/github/v/release/MOHY-Li/pwd-vault?color=emerald" alt="Release"></a>
+  <img src="https://img.shields.io/badge/platform-macOS%20ARM-black" alt="Platform">
+  <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
+</p>
+
+---
+
+## 安装
+
+### Homebrew (推荐)
+
+```bash
+brew tap MOHY-Li/pwd-vault
+brew install --cask pwd-vault
+```
+
+### 手动下载
+
+从 [Releases](https://github.com/MOHY-Li/pwd-vault/releases) 下载最新 DMG，拖入 Applications 即可。
+
+## 功能
+
+- **4 种条目类型** — 登录 / 笔记 / 卡包 / 身份，每种类型差异化字段展示
+- **AES-256 加密** — 本地加密存储，主密码通过 Argon2id 派生密钥
+- **密码生成器** — 可配置长度、字符集、排除易混淆字符
+- **密码强度评估** — 实时评估 + 进度条 + 破解时间估算
+- **TOTP 两步验证** — otpauth URI 解析，实时倒计时刷新
+- **收藏 & 标签** — 星标收藏、标签管理、按类型过滤
+- **导入导出** — `.vault` 加密备份 + `.json` 明文格式
+- **智能去重** — 导入时按类型自动检测重复，支持跳过/重命名
+- **审计日志** — 完整操作记录，显示标题 + ID
+- **回收站** — 条目软删除与恢复
+- **密码历史** — 修改密码时自动保存历史记录
+- **拖拽上传** — 支持拖拽文件导入
+- **条目排序** — 按标题字母 A-Z 排序
+- **必填验证** — 按类型验证核心必填字段
+
+## 截图
+
+| 登录界面 | 主界面 |
+|:---:|:---:|
+| 锁定/创建密码库 | 条目管理 + 侧边栏 |
 
 ## 技术栈
 
-- **Core**: Rust (XChaCha20-Poly1305 + Argon2id + HKDF-SHA256)
-- **Desktop/Mobile**: Tauri 2.0
-- **Frontend**: SolidJS + Tailwind CSS v4 + Vite + TypeScript
-- **Platform**: iOS / Android / macOS / Windows / Linux
-
-## 项目结构
-
-```
-pwd-vault/
-├── crates/
-│   ├── core/                   # Rust 核心加密库
-│   │   └── src/
-│   │       ├── crypto.rs       # XChaCha20-Poly1305 加密 + BLAKE3 MAC + HKDF 密钥派生
-│   │       ├── vault.rs        # .vault 文件格式 (Header → Index → Entries → MAC)
-│   │       ├── vault_index.rs  # 加密索引 (条目元数据 + 文件夹)
-│   │       ├── entry.rs        # Entry 数据结构 (15 字段)
-│   │       ├── generator.rs    # 密码生成器 (随机字符 + Diceware)
-│   │       ├── strength.rs     # 密码强度评估 (熵计算 + 破解时间)
-│   │       ├── totp.rs         # TOTP 二步验证 (SHA1/256/512)
-│   │       ├── import_export.rs # 导入导出 (6格式导入 + 2格式导出)
-│   │       ├── dedup.rs        # 去重引擎 (两遍扫描: 精确去重 → 冲突检测)
-│   │       ├── audit.rs        # 审计日志 (500条环形缓冲)
-│   │       └── error.rs        # 错误类型
-│   └── tauri-plugin/           # Tauri IPC 桥接层
-│       └── src/
-│           ├── commands.rs     # 25 个 Tauri commands
-│           └── lib.rs          # 插件注册
-├── src/                        # SolidJS 前端
-│   ├── api.ts                  # Tauri IPC 类型化封装
-│   ├── stores/vault.ts         # 状态管理 (createSignal + createStore)
-│   ├── App.tsx                 # 根组件
-│   └── components/
-│       ├── auth/LockScreen.tsx        # 创建/解锁密码库
-│       ├── layout/
-│       │   ├── Sidebar.tsx            # 侧边栏 (搜索 + 分类过滤 + 操作)
-│       │   └── MainLayout.tsx         # 布局容器
-│       ├── vault/
-│       │   ├── MainContent.tsx        # 条目详情 + TOTP 实时显示
-│       │   ├── EntryEditor.tsx        # 新建/编辑条目
-│       │   ├── Trash.tsx              # 回收站 (软删除/恢复/永久删除)
-│       │   └── AuditLog.tsx           # 审计日志
-│       ├── generator/PasswordGen.tsx  # 密码生成器
-│       └── import-export/
-│           └── ImportExport.tsx       # 导入导出
-├── src-tauri/                  # Tauri 应用配置
-│   ├── src/main.rs             # 应用入口
-│   └── tauri.conf.json         # 窗口/CSP配置
-├── PLAN.md                     # 技术方案详细设计
-└── README.md
-```
-
-## 特性
-
-- **自定义 .vault 二进制格式** — Header → 加密索引 → 每条记录独立加密 → BLAKE3 MAC
-- **零信任架构** — 主密码通过 Argon2id 派生密钥，密钥永不离开设备
-- **每条记录独立加密** — XChaCha20-Poly1305 AEAD，每条记录独立 nonce + 密钥
-- **文件完整性** — BLAKE3 keyed hash (HKDF 派生 MAC 密钥)，覆盖全文件
-- **回收站** — 软删除机制，支持恢复/永久删除/清空
-- **TOTP 二步验证** — 支持 SHA1/SHA256/SHA512，实时倒计时刷新
-- **密码生成器** — 随机字符模式 + Diceware 单词模式
-- **密码强度评估** — 熵计算 + 破解时间估算
-- **导入导出** — JSON / CSV / Bitwarden JSON+CSV / 1Password CSV / KeePass XML
-- **审计日志** — 记录所有操作（创建/更新/删除/导入/导出/锁定）
-- **自动锁定** — 闲置超时自动锁定，全局事件监听
-- **严格 CSP** — 防止 XSS 攻击
-- **原子写入** — .tmp 文件 + sync_all + rename，防止写入中断损坏
+| 层 | 技术 |
+|---|---|
+| 核心加密 | Rust (XChaCha20-Poly1305 + Argon2id + HKDF-SHA256) |
+| 桌面框架 | Tauri 2.0 |
+| 前端 | SolidJS + TailwindCSS + TypeScript |
+| 构建 | Vite + Cargo |
 
 ## 加密架构
 
@@ -84,53 +75,44 @@ Master Key (32 bytes)
     ├──► HKDF("pwd-vault-mac-key")     → MAC Key (文件完整性)
     └──► HKDF("pwd-vault-entry-key-seed") → Entry Key Seed
               │
-              └──► HKDF(entry_id)      → Per-Entry Key (每条记录独立密钥)
+              └──► HKDF(entry_id) → Per-Entry Key (每条记录独立密钥)
 ```
 
-## .vault 文件格式
+## 项目结构
 
 ```
-┌─────────────────────────────────────┐
-│ Header (77 bytes)                   │
-│  Magic (4B) | Version (1B)          │
-│  Flags (1B) | Argon2 Params (7B)    │
-│  Salt (32B) | Auth Hash (32B)       │
-├─────────────────────────────────────┤
-│ Encrypted Index                     │
-│  Nonce (24B) | Length (4B)          │
-│  Ciphertext (variable)             │
-├─────────────────────────────────────┤
-│ Encrypted Entries                   │
-│  [Length(4B) | Nonce(24B) | CT] × N│
-├─────────────────────────────────────┤
-│ File MAC (32 bytes, BLAKE3)         │
-└─────────────────────────────────────┘
+pwd-vault/
+├── crates/
+│   ├── core/              # Rust 核心加密库
+│   │   └── src/
+│   │       ├── crypto.rs       # XChaCha20-Poly1305 加密 + BLAKE3 MAC
+│   │       ├── vault.rs        # .vault 文件格式
+│   │       ├── entry.rs        # Entry 数据结构
+│   │       ├── generator.rs    # 密码生成器
+│   │       ├── strength.rs     # 密码强度评估
+│   │       ├── totp.rs         # TOTP 二步验证
+│   │       ├── import_export.rs # 导入导出 + 去重
+│   │       └── audit.rs        # 审计日志
+│   └── tauri-plugin/      # Tauri IPC 桥接层
+│       └── src/commands.rs     # Tauri commands
+├── src/                   # SolidJS 前端
+│   ├── App.tsx
+│   ├── api.ts
+│   ├── stores/vault.ts
+│   └── components/
+│       ├── auth/               # 登录/解锁
+│       ├── layout/             # 布局 + 侧边栏
+│       ├── vault/              # 条目管理 + 审计日志
+│       └── import-export/      # 导入导出
+└── src-tauri/             # Tauri 配置
+    ├── src/main.rs
+    └── tauri.conf.json
 ```
 
-## 开发进度
-
-| 阶段 | 内容 | 状态 |
-|------|------|------|
-| Phase 1 | Rust 核心库 (crypto/vault/entry/generator/strength/totp/import_export/dedup/audit) | ✅ 完成 |
-| Phase 2 | Tauri IPC 桥接 + SolidJS 前端 MVP | ✅ 完成 |
-| Phase 3 | 导入导出/TOTP/回收站/审计日志/自动锁定 | ✅ 完成 |
-| Phase 4 | macOS/Windows 真机测试 + 打包 | 🔲 待开始 |
-
-### 质量指标
-
-- Rust: 84 单元测试，0 clippy warnings
-- TypeScript: 0 编译错误
-- 经过 4 轮代码审查，累计修复 19 个问题
-
-## 快速开始
+## 开发
 
 ```bash
-# 前置要求
-# - Rust (edition 2024)
-# - Node.js 20+
-# - Tauri CLI 2.0
-
-# 安装前端依赖
+# 安装依赖
 npm install
 
 # 开发模式
@@ -140,9 +122,19 @@ cargo tauri dev
 cargo tauri build
 ```
 
-## 文档
+## 发版流程
 
-- [技术方案详细设计](PLAN.md)
+```bash
+# 1. 打包
+cargo tauri build
+
+# 2. 创建 GitHub Release
+gh release create vX.Y.Z target/release/bundle/dmg/Pwd-Vault_X.Y.Z_aarch64.dmg
+
+# 3. 更新 Homebrew Cask (计算新 sha256)
+shasum -a 256 target/release/bundle/dmg/Pwd-Vault_X.Y.Z_aarch64.dmg
+# 编辑 homebrew-pwd-vault 仓库的 Casks/pwd-vault.rb，更新 version + sha256
+```
 
 ## License
 
