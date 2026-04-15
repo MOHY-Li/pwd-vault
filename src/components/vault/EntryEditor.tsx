@@ -128,6 +128,16 @@ export default function EntryEditor() {
   async function handleSave() {
     let e = form();
     if (!e || !e.title.trim()) return;
+    // Title duplicate check (case-insensitive)
+    const titleLower = e.title.trim().toLowerCase();
+    const isDuplicate = entries.some(existing =>
+      existing.id !== e!.id && existing.title.trim().toLowerCase() === titleLower
+    );
+    if (isDuplicate) {
+      setSaveError("标题已存在，请使用不同的标题");
+      setSaving(false);
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
