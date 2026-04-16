@@ -110,21 +110,25 @@ export default function EntryEditor() {
   }
 
   async function handleGeneratePassword() {
-    const pwd = await generatePassword({
-      style: "random",
-      length: genLength(),
-      uppercase: genUppercase(),
-      lowercase: genLowercase(),
-      digits: genDigits(),
-      special: genSpecial(),
-      excludeAmbiguous: genNoAmbiguous(),
-    });
-    updateField("password", pwd);
     try {
-      const report = await evaluateStrength(pwd);
-      setStrength(report);
-    } catch {
-      setStrength({ score: 100, entropy: 128, crack_time: "centuries", level: "强" });
+      const pwd = await generatePassword({
+        style: "random",
+        length: genLength(),
+        uppercase: genUppercase(),
+        lowercase: genLowercase(),
+        digits: genDigits(),
+        special: genSpecial(),
+        excludeAmbiguous: genNoAmbiguous(),
+      });
+      updateField("password", pwd);
+      try {
+        const report = await evaluateStrength(pwd);
+        setStrength(report);
+      } catch {
+        setStrength({ score: 100, entropy: 128, crack_time: "centuries", level: "强" });
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     }
   }
 

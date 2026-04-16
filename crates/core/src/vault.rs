@@ -114,7 +114,12 @@ impl VaultFile {
     /// Open and decrypt an existing .vault file.
     pub fn open(master_password: &str, path: &std::path::Path) -> Result<Self> {
         let data = std::fs::read(path)?;
-        let mut cursor = Cursor::new(&data[..]);
+        Self::open_from_bytes(master_password, &data)
+    }
+
+    /// Open and decrypt a vault from raw bytes (without writing to disk).
+    pub fn open_from_bytes(master_password: &str, data: &[u8]) -> Result<Self> {
+        let mut cursor = Cursor::new(data);
 
         // --- read header ---
         let mut magic_buf = [0u8; 4];
@@ -134,6 +139,23 @@ impl VaultFile {
         let argon2_memory_mib = read_u32_le(&mut cursor)?;
         let argon2_iterations = read_u16_le(&mut cursor)?;
         let argon2_parallelism = read_u8(&mut cursor)?;
+
+        // Validate Argon2 parameter minimum bounds
+        if argon2_memory_mib < 64 {
+            return Err(VaultError::VaultCorrupted(format!(
+                "argon2_memory_mib ({argon2_memory_mib}) is below minimum (64 MiB)"
+            )));
+        }
+        if argon2_iterations < 2 {
+            return Err(VaultError::VaultCorrupted(format!(
+                "argon2_iterations ({argon2_iterations}) is below minimum (2)"
+            )));
+        }
+        if argon2_parallelism < 1 {
+            return Err(VaultError::VaultCorrupted(format!(
+                "argon2_parallelism ({argon2_parallelism}) is below minimum (1)"
+            )));
+        }
 
         let mut salt = [0u8; 32];
         cursor.read_exact(&mut salt)?;
@@ -250,7 +272,11 @@ impl VaultFile {
         let deleted_entries: Vec<Entry> = if index.deleted_entries_json.is_empty() {
             Vec::new()
         } else {
-            serde_json::from_str(&index.deleted_entries_json).unwrap_or_default()
+            serde_json::from_str(&index.deleted_entries_json).map_err(|e| {
+                VaultError::VaultCorrupted(format!(
+                    "deleted entries deserialization failed: {e}"
+                ))
+            })?
         };
 
         Ok(Self {
@@ -400,22 +426,14 @@ impl VaultFile {
     // -----------------------------------------------------------------------
 
     /// Add a new entry.  The entry is stored in memory; call `save()` to persist.
-    pub fn add_entry(&mut self, entry: Entry) {
+    pub fn add_entry(&mut self, entry: Entry) -> Result<()> {
         let id = entry.id.clone();
         let title = entry.title.clone();
-        let entry_type_str = match entry.entry_type {
-            crate::entry::EntryType::Login => "login",
-            crate::entry::EntryType::Note => "note",
-            crate::entry::EntryType::Card => "card",
-            crate::entry::EntryType::Identity => "identity",
-            crate::entry::EntryType::Custom(ref s) => s.as_str(),
-        };
+        let entry_type_str = entry.entry_type.as_str();
 
-        // Encrypt the title with the vault key so it's searchable after index decrypt
-        // (We store it as base64-encoded ciphertext in the index.)
-        // For simplicity, we store the title as base64 of the plaintext for now —
-        // the actual per-title encryption can be layered on top.
-        let title_enc = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &title);
+        // Encrypt the title with the vault key so it's searchable after index decrypt.
+        // Stored as base64(encrypted(title)) in the index.
+        let title_enc = self.encrypt_title(&title)?;
 
         let idx_entry = IndexEntry {
             id: id.clone(),
@@ -438,6 +456,7 @@ impl VaultFile {
         } else {
             self.entries.push(entry);
         }
+        Ok(())
     }
 
     /// Update an existing entry by id.
@@ -449,16 +468,9 @@ impl VaultFile {
             .position(|e| e.id == id)
             .ok_or_else(|| VaultError::EntryNotFound(id.clone()))?;
 
-        let entry_type_str = match entry.entry_type {
-            crate::entry::EntryType::Login => "login",
-            crate::entry::EntryType::Note => "note",
-            crate::entry::EntryType::Card => "card",
-            crate::entry::EntryType::Identity => "identity",
-            crate::entry::EntryType::Custom(ref s) => s.as_str(),
-        };
+        let entry_type_str = entry.entry_type.as_str();
 
-        let title_enc =
-            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &entry.title);
+        let title_enc = self.encrypt_title(&entry.title)?;
 
         let idx_entry = IndexEntry {
             id: id.clone(),
@@ -503,19 +515,14 @@ impl VaultFile {
     }
 
     /// Restore a soft-deleted entry back to live entries.
-    pub fn restore_entry(&mut self, id: &str) -> bool {
+    pub fn restore_entry(&mut self, id: &str) -> Result<bool> {
         if let Some(pos) = self.deleted_entries.iter().position(|e| e.id == id) {
             let entry = self.deleted_entries.swap_remove(pos);
-            let entry_type_str = match entry.entry_type {
-                crate::entry::EntryType::Login => "login",
-                crate::entry::EntryType::Note => "note",
-                crate::entry::EntryType::Card => "card",
-                crate::entry::EntryType::Identity => "identity",
-                crate::entry::EntryType::Custom(ref s) => s.as_str(),
-            };
+            let entry_type_str = entry.entry_type.as_str();
+            let title_enc = self.encrypt_title(&entry.title)?;
             let idx_entry = IndexEntry {
                 id: entry.id.clone(),
-                title_enc: base64::engine::general_purpose::STANDARD.encode(&entry.title),
+                title_enc,
                 category: entry_type_str.to_string(),
                 tags: entry.tags.clone(),
                 offset: 0,
@@ -529,9 +536,9 @@ impl VaultFile {
             self.entries.push(entry);
             // Remove from deleted_ids if present
             self.index.deleted_ids.retain(|d| d != id);
-            true
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -565,6 +572,37 @@ impl VaultFile {
             .iter()
             .filter(|e| e.matches_search(query))
             .collect()
+    }
+
+    // -----------------------------------------------------------------------
+    // Title encryption helpers
+    // -----------------------------------------------------------------------
+
+    /// Encrypt a plaintext title with the vault key and return base64-encoded ciphertext.
+    fn encrypt_title(&self, title: &str) -> Result<String> {
+        let vault_key = derive_vault_key(&self.master_key);
+        let encrypted = encrypt(title.as_bytes(), &vault_key)?;
+        // Encode the whole EncryptedData (nonce + ciphertext) as JSON then base64
+        let json =
+            serde_json::to_vec(&encrypted).map_err(|e| VaultError::Serialization(e.to_string()))?;
+        Ok(base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            &json,
+        ))
+    }
+
+    /// Decrypt a base64-encoded encrypted title back to plaintext.
+    pub fn decrypt_title(title_enc: &str, master_key: &MasterKey) -> Result<String> {
+        let vault_key = derive_vault_key(master_key);
+        let json = base64::engine::general_purpose::STANDARD
+            .decode(title_enc)
+            .map_err(|e| VaultError::VaultCorrupted(format!("title base64 decode failed: {e}")))?;
+        let encrypted: EncryptedData = serde_json::from_slice(&json)
+            .map_err(|e| VaultError::VaultCorrupted(format!("title deserialize failed: {e}")))?;
+        let bytes =
+            decrypt(&encrypted, &vault_key).map_err(|e| VaultError::Crypto(format!("{e}")))?;
+        String::from_utf8(bytes)
+            .map_err(|e| VaultError::VaultCorrupted(format!("title UTF-8 decode failed: {e}")))
     }
 
     /// Number of entries.
@@ -682,8 +720,8 @@ mod tests {
         let mut e2 = Entry::new("Bank Note".into(), EntryType::Note);
         e2.notes = "Some banking details".into();
 
-        vault.add_entry(e1.clone());
-        vault.add_entry(e2.clone());
+        vault.add_entry(e1.clone()).unwrap();
+        vault.add_entry(e2.clone()).unwrap();
         assert_eq!(vault.len(), 2);
 
         vault.save(&path).unwrap();
@@ -713,7 +751,7 @@ mod tests {
         let mut vault = VaultFile::create(TEST_PASSWORD).unwrap();
         let mut e = Entry::new("Original".into(), EntryType::Login);
         e.password = "old-pass".into();
-        vault.add_entry(e.clone());
+        vault.add_entry(e.clone()).unwrap();
 
         let id = e.id.clone();
         e.title = "Updated".into();
@@ -739,8 +777,8 @@ mod tests {
         let id1 = e1.id.clone();
         let id2 = e2.id.clone();
 
-        vault.add_entry(e1);
-        vault.add_entry(e2);
+        vault.add_entry(e1).unwrap();
+        vault.add_entry(e2).unwrap();
 
         assert!(vault.delete_entry(&id1));
         assert!(!vault.delete_entry("nonexistent"));
@@ -765,8 +803,8 @@ mod tests {
         e2.url = "https://blog.example.com".into();
         e2.tags = vec!["personal".into()];
 
-        vault.add_entry(e1);
-        vault.add_entry(e2);
+        vault.add_entry(e1).unwrap();
+        vault.add_entry(e2).unwrap();
 
         let results = vault.search_entries("github");
         assert_eq!(results.len(), 1);
@@ -784,7 +822,7 @@ mod tests {
 
         let mut vault = VaultFile::create(TEST_PASSWORD).unwrap();
         let e = Entry::new("Secret".into(), EntryType::Login);
-        vault.add_entry(e);
+        vault.add_entry(e).unwrap();
         vault.save(&path).unwrap();
 
         // Tamper with a byte in the middle of the file
@@ -811,7 +849,7 @@ mod tests {
             e.password = format!("pass{i}!");
             e.tags = vec![if i % 2 == 0 { "even" } else { "odd" }.to_string()];
             ids.push(e.id.clone());
-            vault.add_entry(e);
+            vault.add_entry(e).unwrap();
         }
 
         vault.save(&path).unwrap();

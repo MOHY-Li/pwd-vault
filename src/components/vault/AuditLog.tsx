@@ -43,7 +43,7 @@ export default function AuditLog() {
     if (e === "VaultUnlocked") return icon(Unlock, "解锁密码库");
     if (e === "MasterPasswordChanged") return icon(KeyRound, "修改主密码");
     if (e === "DataExported") return icon(Upload, "导出数据");
-    if (typeof e === "object") {
+    if (e && typeof e === "object") {
       if ("EntryViewed" in e) return icon(Eye, "查看条目 ", `${e.EntryViewed.entry_id.slice(0, 8)}...`);
       if ("EntryCreated" in e) return icon(Plus, "创建条目 ", fmtTitle(e.EntryCreated.title, e.EntryCreated.entry_id));
       if ("EntryUpdated" in e) return icon(Pencil, "更新条目 ", fmtTitle(e.EntryUpdated.title, e.EntryUpdated.entry_id));

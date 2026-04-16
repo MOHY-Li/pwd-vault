@@ -53,19 +53,37 @@ export interface AuditEntry {
   event_type: AuditEvent;
 }
 
-export type AuditEvent =
-  | "VaultCreated"
-  | "VaultOpened"
-  | "VaultLocked"
-  | "VaultUnlocked"
-  | "MasterPasswordChanged"
-  | "DataExported"
-  | { EntryViewed: { entry_id: string } }
-  | { EntryCreated: { entry_id: string } }
-  | { EntryUpdated: { entry_id: string } }
-  | { EntryDeleted: { entry_id: string } }
-  | { PasswordCopied: { entry_id: string } }
-  | { DataImported: { count: number } };
+export type AuditEvent = {
+  type: "vault_created"
+} | {
+  type: "vault_opened"
+} | {
+  type: "vault_locked"
+} | {
+  type: "vault_unlocked"
+} | {
+  type: "master_password_changed"
+} | {
+  type: "data_exported"
+} | {
+  type: "entry_viewed";
+  data: { entry_id: string }
+} | {
+  type: "entry_created";
+  data: { entry_id: string; title: string }
+} | {
+  type: "entry_updated";
+  data: { entry_id: string; title: string }
+} | {
+  type: "entry_deleted";
+  data: { entry_id: string; title: string }
+} | {
+  type: "password_copied";
+  data: { entry_id: string }
+} | {
+  type: "data_imported";
+  data: { imported: number; skipped: number; renamed: number }
+};
 
 // ---------------------------------------------------------------------------
 // Vault lifecycle

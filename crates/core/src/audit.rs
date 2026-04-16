@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -8,6 +10,7 @@ use crate::error::{Result, VaultError};
 // ---------------------------------------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "snake_case", tag = "type", content = "data")]
 pub enum AuditEventType {
     VaultCreated,
     VaultOpened,
@@ -38,7 +41,7 @@ pub struct AuditEntry {
 // ---------------------------------------------------------------------------
 
 pub struct AuditLog {
-    entries: Vec<AuditEntry>,
+    entries: VecDeque<AuditEntry>,
     max_entries: usize,
 }
 
@@ -47,7 +50,7 @@ impl AuditLog {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            entries: Vec::new(),
+            entries: VecDeque::new(),
             max_entries: 500,
         }
     }
@@ -56,25 +59,25 @@ impl AuditLog {
     /// entry is removed first (ring-buffer behaviour).
     pub fn log(&mut self, event: AuditEventType) {
         if self.entries.len() >= self.max_entries {
-            self.entries.remove(0);
+            self.entries.pop_front();
         }
-        self.entries.push(AuditEntry {
+        self.entries.push_back(AuditEntry {
             timestamp: Utc::now(),
             event_type: event,
         });
     }
 
-    /// Return a slice of the last `count` entries (or fewer if not enough).
+    /// Return a vector of the last `count` entries (or fewer if not enough).
     #[must_use]
-    pub fn recent(&self, count: usize) -> &[AuditEntry] {
+    pub fn recent(&self, count: usize) -> Vec<&AuditEntry> {
         let start = self.entries.len().saturating_sub(count);
-        &self.entries[start..]
+        self.entries.iter().skip(start).collect()
     }
 
-    /// Return a slice of all entries.
+    /// Return a vector of all entries.
     #[must_use]
-    pub fn all(&self) -> &[AuditEntry] {
-        &self.entries
+    pub fn all(&self) -> Vec<&AuditEntry> {
+        self.entries.iter().collect()
     }
 
     /// Clear the log.
@@ -96,7 +99,7 @@ impl AuditLog {
         let entries: Vec<AuditEntry> =
             serde_json::from_str(&data).map_err(|e| VaultError::Serialization(e.to_string()))?;
         Ok(Self {
-            entries,
+            entries: entries.into(),
             max_entries: 500,
         })
     }
@@ -124,6 +127,7 @@ mod tests {
         log.log(AuditEventType::VaultCreated);
         log.log(AuditEventType::EntryCreated {
             entry_id: "abc".into(),
+            title: "Test".into(),
         });
         log.log(AuditEventType::EntryViewed {
             entry_id: "abc".into(),
@@ -151,6 +155,7 @@ mod tests {
         for i in 0..10 {
             log.log(AuditEventType::EntryCreated {
                 entry_id: format!("e{i}"),
+                title: format!("Entry {i}"),
             });
         }
 
@@ -160,7 +165,7 @@ mod tests {
         // The first remaining entry should be e5 (the 6th created).
         assert!(matches!(
             &log.all()[0].event_type,
-            AuditEventType::EntryCreated { entry_id } if entry_id == "e5"
+            AuditEventType::EntryCreated { entry_id, .. } if entry_id == "e5"
         ));
     }
 
@@ -183,7 +188,7 @@ mod tests {
         ));
         assert!(matches!(
             loaded.all()[1].event_type,
-            AuditEventType::DataImported { count: 42 }
+            AuditEventType::DataImported { imported: 42, skipped: 3, renamed: 1 }
         ));
     }
 }

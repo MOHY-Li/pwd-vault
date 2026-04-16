@@ -27,18 +27,23 @@ export default function Trash() {
   const [confirmPurgeId, setConfirmPurgeId] = createSignal<string | null>(null);
   const [confirmEmpty, setConfirmEmpty] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
+  const [statusError, setStatusError] = createSignal("");
 
   // Refresh trash list when modal opens
   createEffect(() => {
     if (showTrash()) {
+      setStatusError("");
       refreshTrash();
     }
   });
 
   async function handleRestore(id: string) {
     setBusy(true);
+    setStatusError("");
     try {
       await restoreEntry(id);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -46,9 +51,12 @@ export default function Trash() {
 
   async function handlePurge(id: string) {
     setBusy(true);
+    setStatusError("");
     try {
       await purgeEntry(id);
       setConfirmPurgeId(null);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -56,9 +64,12 @@ export default function Trash() {
 
   async function handleEmpty() {
     setBusy(true);
+    setStatusError("");
     try {
       await emptyTrash();
       setConfirmEmpty(false);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
@@ -68,11 +79,11 @@ export default function Trash() {
     setShowTrash(false);
     setConfirmPurgeId(null);
     setConfirmEmpty(false);
+    setStatusError("");
   }
 
   return (
     <Show when={showTrash()}>
-      (
       <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
         <div class="flex max-h-[85vh] w-full max-w-xl flex-col rounded-xl border border-zinc-700 bg-zinc-900 shadow-2xl">
           {/* Header */}
@@ -90,6 +101,13 @@ export default function Trash() {
               <X size={18} />
             </button>
           </div>
+
+          {/* Error display */}
+          <Show when={statusError()}>
+            <div class="border-b border-red-500/20 bg-red-500/10 px-6 py-2 text-xs text-red-400">
+              {statusError()}
+            </div>
+          </Show>
 
           {/* Body */}
           <div class="flex-1 overflow-y-auto px-6 py-4">
@@ -208,7 +226,6 @@ export default function Trash() {
           </Show>
         </div>
       </div>
-      )
     </Show>
   );
 }

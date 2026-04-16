@@ -3,6 +3,7 @@ import { createSignal, createEffect } from "solid-js";
 import { createStore } from "solid-js/store";
 import type { Entry } from "../api";
 import * as api from "../api";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 
 // ---------------------------------------------------------------------------
 // Auth store
@@ -28,22 +29,37 @@ export async function unlockVault(password: string, path: string) {
 }
 
 export async function lockVault() {
-  await api.vaultLock();
-  setIsUnlocked(false);
-  setEntries([]);
-  setTrash([]);
-  setTotpCodes({});
-  setVaultPath("");
-  // Clear all UI state to prevent stale modals/signals on re-unlock
-  setSelectedEntryId(null);
-  setEditingEntry(null);
-  setEditingIsNew(false);
-  setShowGenerator(false);
-  setShowTrash(false);
-  setShowAuditLog(false);
-  setShowImportExport(false);
-  setSearchQuery("");
-  setSidebarFilter("all");
+  // C2: Clear auto-lock timer
+  if (autoLockTimer) { clearTimeout(autoLockTimer); autoLockTimer = null; }
+  try {
+    await api.vaultLock();
+  } catch (err) {
+    console.error("[lockVault] api.vaultLock failed:", err);
+  } finally {
+    // C1: Remove auto-lock listeners and allow re-registration on next unlock
+    if (autoLockHandler) {
+      const events = ["mousemove", "keydown", "mousedown", "touchstart"];
+      events.forEach(e => document.removeEventListener(e, autoLockHandler!));
+      autoLockHandler = null;
+    }
+    listenersInstalled = false;
+    // Always clear frontend state regardless of API error
+    setIsUnlocked(false);
+    setEntries([]);
+    setTrash([]);
+    setTotpCodes({});
+    setVaultPath("");
+    // Clear all UI state to prevent stale modals/signals on re-unlock
+    setSelectedEntryId(null);
+    setEditingEntry(null);
+    setEditingIsNew(false);
+    setShowGenerator(false);
+    setShowTrash(false);
+    setShowAuditLog(false);
+    setShowImportExport(false);
+    setSearchQuery("");
+    setSidebarFilter("all");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -60,11 +76,11 @@ export function onClipboardError(cb: (msg: string) => void) {
 
 export async function copyToClipboard(text: string): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(text);
+    await writeText(text);
     if (clipboardTimer) clearTimeout(clipboardTimer);
     clipboardTimer = setTimeout(async () => {
       try {
-        await navigator.clipboard.writeText("");
+        await writeText("");
       } catch {
         clipboardErrorCb?.("剪贴板自动清除失败，请手动清除");
       }
@@ -89,8 +105,12 @@ const [entries, setEntries] = createStore<Entry[]>([]);
 export { entries };
 
 export async function refreshEntries() {
-  const list = await api.entryList();
-  setEntries(list);
+  try {
+    const list = await api.entryList();
+    setEntries(list);
+  } catch (err) {
+    console.error("[refreshEntries] failed:", err);
+  }
 }
 
 export async function addEntry(entry: Entry): Promise<string> {
@@ -118,6 +138,8 @@ export async function deleteEntry(id: string) {
     await refreshTrash();
   } catch (err) {
     console.error("[deleteEntry] failed:", err);
+    // Re-throw so callers can show error to user
+    throw err;
   }
 }
 
@@ -129,8 +151,12 @@ const [trash, setTrash] = createStore<Entry[]>([]);
 export { trash };
 
 export async function refreshTrash() {
-  const list = await api.trashList();
-  setTrash(list);
+  try {
+    const list = await api.trashList();
+    setTrash(list);
+  } catch (err) {
+    console.error("[refreshTrash] failed:", err);
+  }
 }
 
 export async function restoreEntry(id: string) {
@@ -164,8 +190,9 @@ export async function refreshTotp(entryId: string) {
     const code = await api.totpGenerate(entryId);
     const remaining = await api.totpTimeRemaining(entryId);
     setTotpCodes((prev) => ({ ...prev, [entryId]: { code, remaining } }));
-  } catch {
+  } catch (err) {
     // Entry may not have TOTP configured
+    console.error("[refreshTotp] failed:", err);
   }
 }
 
@@ -191,6 +218,8 @@ const [autoLockMinutes, setAutoLockMinutes] = createSignal(5);
 export { autoLockMinutes, setAutoLockMinutes };
 
 let autoLockTimer: ReturnType<typeof setTimeout> | null = null;
+let listenersInstalled = false;
+let autoLockHandler: (() => void) | null = null;
 
 export function resetAutoLockTimer() {
   if (autoLockTimer) clearTimeout(autoLockTimer);
@@ -208,7 +237,10 @@ export function setAutoLock(minutes: number) {
 }
 
 export function initAutoLockListener() {
+  if (listenersInstalled) return;
+  listenersInstalled = true;
   const events = ["mousemove", "keydown", "mousedown", "touchstart"];
   const handler = () => resetAutoLockTimer();
+  autoLockHandler = handler;
   events.forEach(e => document.addEventListener(e, handler, { passive: true }));
 }

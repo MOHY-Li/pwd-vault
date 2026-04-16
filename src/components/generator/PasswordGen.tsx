@@ -17,6 +17,7 @@ export default function PasswordGen() {
   const [result, setResult] = createSignal("");
   const [strength, setStrength] = createSignal<StrengthReport | null>(null);
   const [copied, setCopied] = createSignal(false);
+  const [error, setError] = createSignal("");
 
   async function handleGenerate() {
     try {
@@ -32,11 +33,13 @@ export default function PasswordGen() {
         separator: separator(),
       });
       setResult(pwd);
+      setError("");
       const report = await evaluateStrength(pwd);
       setStrength(report);
-    } catch {
+    } catch (err) {
       setResult("");
       setStrength(null);
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -98,11 +101,11 @@ export default function PasswordGen() {
             </div>
 
             <div class="grid grid-cols-2 gap-2">
-              <Checkbox label="大写字母 (A-Z)" checked={uppercase()} onChange={setUppercase} />
-              <Checkbox label="小写字母 (a-z)" checked={lowercase()} onChange={setLowercase} />
-              <Checkbox label="数字 (0-9)" checked={digits()} onChange={setDigits} />
-              <Checkbox label="特殊符号 (!@#)" checked={special()} onChange={setSpecial} />
-              <Checkbox label="排除易混淆字符" checked={excludeAmbiguous()} onChange={setExcludeAmbiguous} />
+              <Checkbox label="大写字母 (A-Z)" checked={uppercase} onChange={setUppercase} />
+              <Checkbox label="小写字母 (a-z)" checked={lowercase} onChange={setLowercase} />
+              <Checkbox label="数字 (0-9)" checked={digits} onChange={setDigits} />
+              <Checkbox label="特殊符号 (!@#)" checked={special} onChange={setSpecial} />
+              <Checkbox label="排除易混淆字符" checked={excludeAmbiguous} onChange={setExcludeAmbiguous} />
             </div>
           </div>
         </Show>
@@ -142,6 +145,12 @@ export default function PasswordGen() {
         </Show>
 
         {/* Result */}
+        <Show when={error()}>
+          <div class="mt-4 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {error()}
+          </div>
+        </Show>
+
         <Show when={result()}>
           <div class="mt-4">
             <div class="flex items-center gap-2 rounded-lg bg-zinc-800 p-3">
@@ -180,12 +189,12 @@ export default function PasswordGen() {
   );
 }
 
-function Checkbox(props: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Checkbox(props: { label: string; checked: () => boolean; onChange: (v: boolean) => void }) {
   return (
     <label class="flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-xs text-zinc-300">
       <input
         type="checkbox"
-        checked={props.checked}
+        checked={props.checked()}
         onChange={(e) => props.onChange(e.currentTarget.checked)}
         class="accent-emerald-500"
       />

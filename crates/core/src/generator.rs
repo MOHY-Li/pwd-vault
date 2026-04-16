@@ -137,7 +137,7 @@ fn csp_random_index(max: usize) -> crate::error::Result<usize> {
     let limit = rand_max - (rand_max % max as u64);
     loop {
         let bytes = csp_random_bytes(8)?;
-        let val = u64::from_ne_bytes(bytes.as_slice().try_into().expect("8 bytes"));
+        let val = u64::from_le_bytes(bytes.as_slice().try_into().expect("8 bytes"));
         if val < limit {
             return Ok((val % max as u64) as usize);
         }

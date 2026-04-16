@@ -26,13 +26,16 @@ pub struct VaultIndex {
     /// When the vault (or its index) was last modified.
     pub modified: DateTime<Utc>,
     /// Metadata for every live entry.
+    #[serde(default)]
     pub entries: Vec<IndexEntry>,
     /// IDs of soft-deleted entries (kept for dedup and possible restore).
+    #[serde(default)]
     pub deleted_ids: Vec<String>,
     /// Serialised soft-deleted entries (encrypted alongside the rest of the index).
     #[serde(default)]
     pub deleted_entries_json: String,
     /// Folder hierarchy.
+    #[serde(default)]
     pub folders: Vec<Folder>,
 }
 

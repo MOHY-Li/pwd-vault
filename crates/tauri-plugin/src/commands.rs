@@ -70,14 +70,8 @@ pub fn vault_create(
     let file_path = PathBuf::from(&path);
     vault.save(&file_path).map_err(|e| e.to_string())?;
 
-    *vault_state
-        .0
-        .lock()
-        .map_err(|e| format!("lock error: {e}"))? = Some(vault);
-    *vault_path
-        .0
-        .lock()
-        .map_err(|e| format!("lock error: {e}"))? = Some(file_path);
+    *get_vault(&vault_state)? = Some(vault);
+    *get_path(&vault_path)? = Some(file_path);
 
     audit_state
         .0
@@ -98,17 +92,12 @@ pub fn vault_open(
     let file_path = PathBuf::from(&path);
     let vault = VaultFile::open(&master_password, &file_path).map_err(|e| e.to_string())?;
 
-    *vault_state
-        .0
-        .lock()
-        .map_err(|e| format!("lock error: {e}"))? = Some(vault);
-    *vault_path
-        .0
-        .lock()
-        .map_err(|e| format!("lock error: {e}"))? = Some(file_path.clone());
+    *get_vault(&vault_state)? = Some(vault);
+    *get_path(&vault_path)? = Some(file_path.clone());
 
     // R1: Load persisted audit log if it exists
     let audit_path = audit_path_for_vault(&file_path);
+    #[allow(clippy::collapsible_if)]
     if audit_path.exists() {
         if let Ok(loaded) = AuditLog::load_from_file(&audit_path) {
             *audit_state.0.lock().map_err(|e| e.to_string())? = loaded;
@@ -197,7 +186,7 @@ pub fn entry_add(
 
     let id = entry.id.clone();
     let title = entry.title.clone();
-    vault.add_entry(entry);
+    vault.add_entry(entry).map_err(|e| e.to_string())?;
 
     audit_state
         .0
@@ -304,6 +293,7 @@ pub fn entry_search(query: String, vault_state: State<'_, VaultState>) -> Result
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn generate_password(
     style: String,
     length: u32,
@@ -422,6 +412,11 @@ pub fn vault_import(
 ) -> Result<String, String> {
     let import_format = match format.as_str() {
         "json" => ImportFormat::Json,
+        "csv" => ImportFormat::Csv,
+        "bitwarden_json" => ImportFormat::BitwardenJson,
+        "bitwarden_csv" => ImportFormat::BitwardenCsv,
+        "onepassword_csv" => ImportFormat::OnePasswordCsv,
+        "keepass_xml" => ImportFormat::KeePassXml,
         other => return Err(format!("unknown import format: {other}")),
     };
 
@@ -437,7 +432,7 @@ pub fn vault_import(
 
     let _count = to_add.len();
     for entry in to_add {
-        vault.add_entry(entry);
+        vault.add_entry(entry).map_err(|e| e.to_string())?;
     }
 
     audit_state
@@ -502,7 +497,7 @@ pub fn vault_import_file(
 
     let _count = to_add.len();
     for entry in to_add {
-        vault.add_entry(entry);
+        vault.add_entry(entry).map_err(|e| e.to_string())?;
     }
 
     audit_state
@@ -524,7 +519,6 @@ pub fn vault_export(
     let export_format = match format.as_str() {
         "json" => ExportFormat::Json,
         "csv" => ExportFormat::Csv,
-        "vault" => ExportFormat::VaultFile,
         other => return Err(format!("unknown export format: {other}")),
     };
 
@@ -577,7 +571,7 @@ pub fn entry_restore(id: String, vault_state: State<'_, VaultState>) -> Result<(
     let vault = guard
         .as_mut()
         .ok_or_else(|| "no vault is open".to_string())?;
-    if vault.restore_entry(&id) {
+    if vault.restore_entry(&id).map_err(|e| e.to_string())? {
         Ok(())
     } else {
         Err(format!("deleted entry not found: {id}"))
@@ -615,6 +609,6 @@ pub fn trash_empty(vault_state: State<'_, VaultState>) -> Result<(), String> {
 pub fn audit_recent(count: usize, audit_state: State<'_, AuditState>) -> Result<String, String> {
     let log = audit_state.0.lock().map_err(|e| e.to_string())?;
     let entries = log.recent(count);
-    serde_json::to_string(entries).map_err(|e| format!("serialization error: {e}"))
+    serde_json::to_string(&entries).map_err(|e| format!("serialization error: {e}"))
 }
 

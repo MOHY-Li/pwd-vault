@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 // ---------------------------------------------------------------------------
 // EntryType
@@ -15,8 +16,24 @@ pub enum EntryType {
     Card,
     Identity,
     /// User-defined type with a custom label.
+    /// Kept for backward compatibility when deserializing vaults created by older versions.
+    /// New entries no longer offer Custom as a type option (UI uses login/note/card/identity only).
     #[serde(rename = "custom")]
     Custom(String),
+}
+
+impl EntryType {
+    /// Return the static string label for this entry type.
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EntryType::Login => "login",
+            EntryType::Note => "note",
+            EntryType::Card => "card",
+            EntryType::Identity => "identity",
+            EntryType::Custom(_) => "custom",
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +104,12 @@ impl Default for TotpConfig {
     }
 }
 
+impl Drop for TotpConfig {
+    fn drop(&mut self) {
+        self.secret.zeroize();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Password history
 // ---------------------------------------------------------------------------
@@ -96,6 +119,12 @@ impl Default for TotpConfig {
 pub struct PasswordHistoryEntry {
     pub password: String,
     pub changed_at: DateTime<Utc>,
+}
+
+impl Drop for PasswordHistoryEntry {
+    fn drop(&mut self) {
+        self.password.zeroize();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +219,24 @@ impl Entry {
         )
         .to_lowercase();
         hay.contains(&q)
+    }
+}
+
+impl Drop for Entry {
+    fn drop(&mut self) {
+        self.password.zeroize();
+        self.username.zeroize();
+        self.notes.zeroize();
+        self.url.zeroize();
+        if let Some(ref mut totp) = self.totp {
+            totp.secret.zeroize();
+        }
+        for field in &mut self.custom_fields {
+            field.value.zeroize();
+        }
+        for hist in &mut self.password_history {
+            hist.password.zeroize();
+        }
     }
 }
 

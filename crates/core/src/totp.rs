@@ -23,6 +23,14 @@ fn from_totp_rs_algorithm(algo: totp_rs::Algorithm) -> TotpAlgorithm {
 ///
 /// Returns a zero-padded numeric string whose length equals `config.digits`.
 pub fn generate_totp(config: &TotpConfig) -> Result<String> {
+    // Validate digits is a standard TOTP value (6 or 8).
+    if config.digits != 6 && config.digits != 8 {
+        return Err(VaultError::Totp(format!(
+            "invalid digits count: {}; must be 6 or 8",
+            config.digits
+        )));
+    }
+
     let algorithm = to_totp_rs_algorithm(&config.algorithm);
     let secret = totp_rs::Secret::Encoded(config.secret.clone())
         .to_bytes()

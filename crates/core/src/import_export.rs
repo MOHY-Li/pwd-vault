@@ -20,7 +20,7 @@ pub enum ImportFormat {
 pub enum ExportFormat {
     Json,
     Csv,
-    VaultFile,
+    // VaultFile export removed — use vault_export_file command for encrypted vault export.
 }
 
 // ---------------------------------------------------------------------------
@@ -42,11 +42,7 @@ pub fn import_entries(format: &ImportFormat, data: &str) -> Result<Vec<Entry>> {
 /// Import entries from a .vault file using the provided password.
 /// Returns all (non-deleted) entries from the source vault.
 pub fn import_vault_bytes(password: &str, data: &[u8]) -> Result<Vec<Entry>> {
-    // Write to a temporary file and use VaultFile::open
-    let temp_path = std::env::temp_dir().join(format!("pwd-vault-import-{}", uuid::Uuid::new_v4()));
-    std::fs::write(&temp_path, data)?;
-    let vault = crate::vault::VaultFile::open(password, &temp_path)?;
-    std::fs::remove_file(&temp_path).ok();
+    let vault = crate::vault::VaultFile::open_from_bytes(password, data)?;
     Ok(vault.entries().to_vec())
 }
 
@@ -197,12 +193,12 @@ pub fn export_entries(
             })
             .collect();
         match format {
-            ExportFormat::Json | ExportFormat::VaultFile => export_json(&sanitized),
+            ExportFormat::Json => export_json(&sanitized),
             ExportFormat::Csv => export_csv(&sanitized),
         }
     } else {
         match format {
-            ExportFormat::Json | ExportFormat::VaultFile => export_json(entries),
+            ExportFormat::Json => export_json(entries),
             ExportFormat::Csv => export_csv(entries),
         }
     }
@@ -325,6 +321,7 @@ fn import_bitwarden_json(data: &str) -> Result<Vec<Entry>> {
             e.username = login["username"].as_str().unwrap_or("").to_string();
             e.password = login["password"].as_str().unwrap_or("").to_string();
             if let Some(uris) = login.get("uris").and_then(|u| u.as_array()) {
+                #[allow(clippy::collapsible_if)]
                 if let Some(first_uri) = uris.first() {
                     e.url = first_uri["uri"].as_str().unwrap_or("").to_string();
                 }
@@ -335,6 +332,7 @@ fn import_bitwarden_json(data: &str) -> Result<Vec<Entry>> {
 
         // folder
         if let Some(folder) = item.get("folderName").and_then(|f| f.as_str()) {
+            #[allow(clippy::collapsible_if)]
             if !folder.is_empty() {
                 e.folder = Some(folder.to_string());
             }
@@ -520,13 +518,7 @@ fn export_csv(entries: &[Entry]) -> Result<String> {
     .map_err(|e| VaultError::Export(format!("CSV write error: {e}")))?;
 
     for e in entries {
-        let type_str = match e.entry_type {
-            EntryType::Login => "login",
-            EntryType::Note => "note",
-            EntryType::Card => "card",
-            EntryType::Identity => "identity",
-            EntryType::Custom(ref s) => s.as_str(),
-        };
+        let type_str = e.entry_type.as_str();
         let tags = e.tags.join(";");
         let favorite_str = if e.favorite { "true" } else { "false" };
         wtr.write_record([

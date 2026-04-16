@@ -151,10 +151,16 @@ impl DedupEngine {
 fn normalize_url(url: &str) -> String {
     let mut s = url.trim().to_lowercase();
 
-    // Strip common schemes.
-    for prefix in &["https://", "http://", "www."] {
-        if s.starts_with(prefix) {
-            s = s[prefix.len()..].to_string();
+    // Strip common schemes and www. prefix sequentially.
+    loop {
+        let before = s.len();
+        for prefix in &["https://", "http://", "www."] {
+            if s.starts_with(prefix) {
+                s = s[prefix.len()..].to_string();
+            }
+        }
+        if s.len() == before {
+            break;
         }
     }
 

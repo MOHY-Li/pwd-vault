@@ -13,10 +13,10 @@ fn bench_key_derivation(c: &mut Criterion) {
     let password = "benchmark-master-password-2024";
 
     c.bench_function("derive_master_key", |b| {
-        b.iter(|| derive_master_key(password, &salt).unwrap());
+        b.iter(|| derive_master_key(password, &salt, 256, 4, 4).unwrap());
     });
 
-    let master_key = derive_master_key(password, &salt).unwrap();
+    let master_key = derive_master_key(password, &salt, 256, 4, 4).unwrap();
     c.bench_function("derive_auth_hash", |b| {
         b.iter(|| derive_auth_hash(&master_key))
     });

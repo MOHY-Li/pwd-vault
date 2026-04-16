@@ -1,4 +1,4 @@
-import { For, Show, createSignal, onCleanup } from "solid-js";
+import { For, Show, createSignal, createEffect, onCleanup, createMemo } from "solid-js";
 import {
   Inbox,
   Star,
@@ -51,6 +51,8 @@ function getEntryIcon(entryType: string) {
 export default function Sidebar() {
   // L4: Debounced search input (200ms)
   const [inputValue, setInputValue] = createSignal(searchQuery());
+  // Sync inputValue when searchQuery is externally reset (e.g. lockVault)
+  createEffect(() => { if (searchQuery() === "" && inputValue() !== "") setInputValue(""); });
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   function handleSearchInput(value: string) {
@@ -66,7 +68,7 @@ export default function Sidebar() {
     if (debounceTimer) clearTimeout(debounceTimer);
   });
 
-  const filteredEntries = () => {
+  const filteredEntries = createMemo(() => {
     const q = searchQuery().toLowerCase();
     const filter = sidebarFilter();
 
@@ -79,7 +81,7 @@ export default function Sidebar() {
       }
       return true;
     }).sort((a: Entry, b: Entry) => a.title.localeCompare(b.title, "en", { sensitivity: "base" }));
-  };
+  });
 
   function handleNewEntry() {
     const empty: Entry = {

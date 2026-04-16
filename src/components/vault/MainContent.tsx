@@ -1,4 +1,4 @@
-import { Show, For, createSignal, createEffect, onCleanup, Switch, Match, JSX } from "solid-js";
+import { Show, For, createSignal, createEffect, onCleanup, on, Switch, Match, JSX } from "solid-js";
 import {
   Trash2, Check, Copy, Pencil, Eye, EyeOff, Shield, KeyRound, FileText, CreditCard, UserRound, Star, Calendar, Tag, PlusCircle, AlertTriangle,
 } from "lucide-solid";
@@ -230,7 +230,7 @@ export default function MainContent() {
                         )}</For>
                       </div>
                     </Show>
-                    <Show when={!entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话").length}>
+                    <Show when={entry().custom_fields?.filter((c: CustomField) => c.name !== "邮箱" && c.name !== "电话").length === 0}>
                       <div class="rounded-lg border border-dashed border-zinc-800 p-3 text-center text-[11px] text-zinc-600">
                         暂无自定义字段，编辑条目可添加更多信息
                       </div>
@@ -322,11 +322,11 @@ function TotpDisplay(props: { entryId: string; copied: boolean; onCopy: (code: s
   const [code, setCode] = createSignal("");
   const [remaining, setRemaining] = createSignal(0);
 
-  createEffect(() => {
-    refreshTotp(props.entryId);
-    const interval = setInterval(() => refreshTotp(props.entryId), 5000);
+  createEffect(on(() => props.entryId, (id) => {
+    refreshTotp(id);
+    const interval = setInterval(() => refreshTotp(id), 5000);
     onCleanup(() => clearInterval(interval));
-  });
+  }));
 
   createEffect(() => {
     const data = totpCodes()[props.entryId];
